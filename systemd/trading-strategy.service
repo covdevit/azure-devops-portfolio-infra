@@ -1,8 +1,9 @@
 [Unit]
 Description=Trading strategy (Azure) - WebSocket/I/O-bound process
-# Startuj dopiero gdy sieć jest w pełni gotowa (WebSocket do exchange) —
-# to samo zabezpieczenie, które okazało się potrzebne w Oracle: bez tego
-# usługa czasem próbowała łączyć się, zanim DNS/routing był gotowy po boot.
+# Only start once networking is fully ready (WebSocket to the exchange) —
+# the same safeguard that turned out to be needed on Oracle: without this,
+# the service sometimes tried to connect before DNS/routing was ready
+# after boot.
 After=network-online.target
 Wants=network-online.target
 
@@ -11,17 +12,17 @@ Type=simple
 User=azadmin
 WorkingDirectory=/opt/trading-strategy
 Environment=PYTHONUNBUFFERED=1
-# python -u ORAZ PYTHONUNBUFFERED=1 razem — nadmiarowe, ale w Oracle jedno
-# bez drugiego nie zawsze wystarczało w zależności od tego, jak proces
-# był owinięty (np. przez skrypt pośredniczący). Zostawione jako podwójne
-# zabezpieczenie przed "logi wyglądają na puste mimo działającego procesu".
+# python -u AND PYTHONUNBUFFERED=1 together — redundant, but on Oracle one
+# without the other didn't always work, depending on how the process was
+# wrapped (e.g. by an intermediary script). Kept as a double safeguard
+# against "logs look empty even though the process is running".
 ExecStart=/opt/trading-strategy/venv/bin/python3 -u /opt/trading-strategy/strategy.py
 
 Restart=always
 RestartSec=5
 
-# Logi trafiają do journald -> syslog -> Azure Monitor Agent -> Log
-# Analytics (patrz bicep/modules/monitor.bicep, dataFlows syslog).
+# Logs go to journald -> syslog -> Azure Monitor Agent -> Log Analytics
+# (see bicep/modules/monitor.bicep, syslog dataFlows).
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=trading-strategy

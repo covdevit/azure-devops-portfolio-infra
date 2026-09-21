@@ -1,30 +1,31 @@
 // vm.bicep
-// Pojedyncza VM B1S (Always Free tier przez pierwsze 12 miesięcy), Ubuntu
-// 22.04 LTS, z System-Assigned Managed Identity — bez pliku .env z
-// sekretami na dysku (AZ-104 domena: Manage Azure identities).
+// A single B1S VM (Always Free tier for the first 12 months), Ubuntu
+// 22.04 LTS, with a System-Assigned Managed Identity — no .env file with
+// secrets on disk (AZ-104 domain: Manage Azure identities).
 //
-// Provisioning startowy robi cloud-init: instaluje Pythona, tworzy katalog
-// aplikacji i REJESTRUJE usługę systemd, ale NIE uruchamia jeszcze żadnego
-// kodu strategii — to zadanie workflow `deploy-app.yml`, uruchamianego
-// osobno, gdy kod strategii jest gotowy (patrz sekcja 8 konspektu: "budować
-// infrastrukturę już teraz, strategia to plik do podmiany później").
+// Initial provisioning is handled by cloud-init: it installs Python,
+// creates the application directory and REGISTERS the systemd service, but
+// does NOT yet start any strategy code — that's the job of the separate
+// `deploy-app.yml` workflow, run once the strategy code is ready (see
+// section 8 of the original outline: "build the infrastructure now, the
+// strategy is just a file to be swapped in later").
 
-@description('Region wdrożenia')
+@description('Deployment region')
 param location string
 
-@description('Prefiks nazw zasobów')
+@description('Resource name prefix')
 param namePrefix string
 
-@description('ID subnetu, do którego podłączona jest VM')
+@description('ID of the subnet the VM attaches to')
 param subnetId string
 
-@description('Publiczny klucz SSH administratora (zawartość pliku .pub)')
+@description('Admin SSH public key (contents of the .pub file)')
 param adminSshPublicKey string
 
-@description('Nazwa użytkownika administratora VM')
+@description('VM admin username')
 param adminUsername string = 'azadmin'
 
-@description('Tagi wspólne')
+@description('Common tags')
 param tags object
 
 var vmSize = 'Standard_B1s'
@@ -34,12 +35,13 @@ resource publicIp 'Microsoft.Network/publicIPAddresses@2023-09-01' = {
   location: location
   tags: tags
   sku: {
-    name: 'Basic' // Basic SKU wystarcza i mieści się w Always Free; Standard SKU jest płatny per godzina
+    name: 'Basic' // Basic SKU is enough and falls within Always Free; Standard SKU is billed per hour
   }
   properties: {
-    // Static, nie Dynamic: chcemy znać adres IP od razu po deploymencie
-    // (potrzebny w output i w RUNBOOK do `ssh`), a nie dopiero po starcie VM.
-    // Basic SKU obsługuje Static i mieści się w Always Free.
+    // Static, not Dynamic: we want to know the IP address right after
+    // deployment (needed in the output and in the RUNBOOK for `ssh`),
+    // rather than only after the VM has started.
+    // Basic SKU supports Static and stays within Always Free.
     publicIPAllocationMethod: 'Static'
   }
 }
@@ -66,7 +68,7 @@ resource nic 'Microsoft.Network/networkInterfaces@2023-09-01' = {
   }
 }
 
-// cloud-init: przygotowuje maszynę, ale nie startuje strategii.
+// cloud-init: prepares the machine but does not start the strategy.
 var cloudInit = base64('''#cloud-config
 package_update: true
 package_upgrade: false
@@ -118,7 +120,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2023-09-01' = {
       osDisk: {
         createOption: 'FromImage'
         managedDisk: {
-          storageAccountType: 'Standard_LRS' // Always Free obejmuje dysk Standard HDD/SSD do 64 GB — patrz docs/ARCHITECTURE.md
+          storageAccountType: 'Standard_LRS' // Always Free covers a Standard HDD/SSD disk up to 64 GB — see docs/ARCHITECTURE.md
         }
         diskSizeGB: 30
       }

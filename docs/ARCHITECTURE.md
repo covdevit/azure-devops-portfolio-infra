@@ -1,6 +1,6 @@
-# Architektura
+# Architecture
 
-## Diagram (logiczny)
+## Diagram (logical)
 
 ```
                          ┌─────────────────────────────────────────┐
@@ -21,7 +21,7 @@
                          │  │   │     Identity                    │ │  │
                          │  │   │   - systemd: trading-strategy   │ │  │
                          │  │   │     (Restart=always)            │ │  │
-                         │  │   │   - SQLite (stan lokalny)       │ │  │
+                         │  │   │   - SQLite (local state)        │ │  │
                          │  │   └──────┬───────────────┬──────────┘ │  │
                          │  │          │ syslog/perf   │ backup      │  │
                          │  │   ┌──────▼──────┐  ┌─────▼──────────┐ │  │
@@ -32,97 +32,102 @@
                          │  └───────────────────────────────────────┘  │
                          └─────────────────────────────────────────────┘
 
-   Poza subskrypcją:  exchange (WebSocket, publiczne dane rynkowe) ◀── VM (outbound only)
+   Outside the subscription:  exchange (WebSocket, public market data) ◀── VM (outbound only)
 ```
 
-## Decyzje i ich uzasadnienie
+## Decisions and their reasoning
 
-### Deploy-on-demand zamiast 24/7
+### Deploy-on-demand instead of 24/7
 
-Zdecydowano (patrz sekcja 3 konspektu wyjściowego) na model, w którym
-infrastruktura jest stawiana i zdejmowana komendą, a nie stoi cały czas.
-Powody:
+Chose (see section 3 of the original outline) a model where the
+infrastructure is stood up and torn down by command, rather than running
+continuously. Reasons:
 
-- Azure daje VM B1S za darmo tylko przez 12 miesięcy od założenia konta —
-  w przeciwieństwie do Oracle Always Free, które nie ma limitu czasowego.
-  Trzymanie VM 24/7 przez cały rok zużywa ten limit bezpowrotnie; deploy-on-
-  demand pozwala rozciągnąć darmowy okres na dłużej realnego użytkowania.
-- Odtwarzalna infrastruktura sterowana z kodu jest właśnie tym, co ma
-  wartość w portfolio DevOps — VM postawiona ręcznie i zostawiona na stałe
-  tego nie pokazuje.
-- Koszt uboczny: trzeba pamiętać o teardown i re-deployu, adres IP VM
-  zmienia się przy każdym cyklu (public IP jest tworzony na nowo). To
-  świadomy kompromis — `deploy-app.yml` przyjmuje adres IP jako input, a nie
-  odczytuje go automatycznie.
+- Azure only gives away a free B1S VM for 12 months from account creation
+  — unlike Oracle Always Free, which has no time limit. Keeping a VM up
+  24/7 for the whole year burns through that allowance for good;
+  deploy-on-demand lets the free period stretch across more actual usage.
+- Reproducible, code-driven infrastructure is exactly what has value in a
+  DevOps portfolio — a VM that was clicked together by hand and left
+  running forever doesn't demonstrate that.
+- Side effect: you need to remember to tear down and redeploy, and the
+  VM's IP address changes on every cycle (the public IP is recreated each
+  time). This is a deliberate trade-off — `deploy-app.yml` takes the IP
+  address as an input rather than reading it automatically.
 
-### Bicep zamiast Terraform/ARM JSON
+### Bicep instead of Terraform/ARM JSON
 
-Bicep jest natywny dla Azure i bezpośrednio pokrywa się z materiałem AZ-104
-(egzamin zakłada znajomość ARM templates/Bicep, nie Terraformu). Subscription-
-scope (`targetScope = 'subscription'`) w `main.bicep` pozwala jednej komendzie
-stworzyć samą resource group i wszystko w środku — bez wcześniejszego
-ręcznego kroku "najpierw stwórz RG w portalu".
+Bicep is native to Azure and maps directly onto AZ-104 material (the exam
+expects familiarity with ARM templates/Bicep, not Terraform).
+Subscription-scope (`targetScope = 'subscription'`) in `main.bicep` lets a
+single command create both the resource group and everything inside it —
+no separate manual step to "create the RG in the portal first".
 
-### Key Vault + Managed Identity zamiast .env
+### Key Vault + Managed Identity instead of .env
 
-Obecna strategia w Oracle nie używa żadnych kluczy API (tylko publiczne dane
-rynkowe przez WebSocket), więc VM na Azure też może startować bez żadnych
-sekretów. Mimo to Key Vault jest częścią infrastruktury od początku, bo:
+The current strategy on Oracle uses no API keys at all (only public
+market data over WebSocket), so the VM on Azure can also start with zero
+secrets. Even so, Key Vault is part of the infrastructure from day one,
+because:
 
-1. AZ-104 wprost testuje Key Vault + Managed Identity + RBAC.
-2. Jeśli DRUGA strategia (projektowana równolegle) będzie jednak potrzebować
-   kluczy do innego dostawcy danych, infrastruktura jest już gotowa — dodanie
-   sekretu to `az keyvault secret set`, zero zmian w Bicep.
-3. RBAC (`enableRbacAuthorization: true`), nie legacy access policies — to
-   aktualna rekomendowana praktyka i to, co powinno się umieć na egzaminie.
+1. AZ-104 directly tests Key Vault + Managed Identity + RBAC.
+2. If the SECOND strategy (being designed in parallel) ends up needing
+   keys for a different data provider, the infrastructure is already
+   ready — adding a secret is just `az keyvault secret set`, zero Bicep
+   changes.
+3. RBAC (`enableRbacAuthorization: true`), not legacy access policies —
+   that's the current recommended practice and what you should know for
+   the exam.
 
-Sekrety **nie** są tworzone przez Bicep — deployment nie zna żadnych
-wartości sekretnych, więc nic wrażliwego nie trafia do stanu deploymentu ani
-historii repo (nawet gdyby repo było prywatne).
+Secrets are **not** created by Bicep — the deployment never sees any
+sensitive values, so nothing sensitive ends up in deployment state or repo
+history (even if the repo were private).
 
-### NSG: brak inbound poza SSH z jednego IP
+### NSG: no inbound except SSH from one IP
 
-Proces strategii nie nasłuchuje niczego — łączy się tylko wychodząco. Jedyny
-potrzebny ruch przychodzący to SSH administratora, zawężony do jednego
-adresu IP (parametr `adminSourceIp`). Jawna reguła `Deny-All-Inbound-Internet`
-o niskim priorytecie dokumentuje intencję, nawet jeśli domyślne reguły Azure
-i tak by to zablokowały.
+The strategy process doesn't listen on anything — it only makes outbound
+connections. The only inbound traffic needed is admin SSH, restricted to a
+single IP address (the `adminSourceIp` parameter). An explicit
+`Deny-All-Inbound-Internet` rule at low priority documents the intent,
+even though Azure's default rules would already block it.
 
-### Log Analytics + syslog zamiast tail -f
+### Log Analytics + syslog instead of tail -f
 
-`journald` procesu (przez `StandardOutput=journal` w unit systemd) trafia do
-syslog, który Azure Monitor Agent wysyła do Log Analytics przez Data
-Collection Rule zdefiniowaną w `monitor.bicep`. Zapytania KQL zamiast SSH +
-tail -f — przykłady w `RUNBOOK.md`.
+The process's `journald` output (via `StandardOutput=journal` in the
+systemd unit) flows into syslog, which the Azure Monitor Agent forwards to
+Log Analytics via a Data Collection Rule defined in `monitor.bicep`. KQL
+queries instead of SSH + tail -f — examples in `RUNBOOK.md`.
 
-### Storage Account jako backup, nie hot path
+### Storage Account as backup, not the hot path
 
-SQLite zostaje lokalnie na dysku VM (proces musi mieć do niego szybki,
-lokalny dostęp — sieciowy system plików byłby niepotrzebnym ryzykiem
-opóźnień/blokad). Storage Account służy wyłącznie do okresowego backupu
-(cron/systemd timer po stronie VM — do skonfigurowania po podłączeniu
-właściwej strategii, gdy znany będzie realny rozmiar/częstotliwość zmian
-pliku stanu).
+SQLite stays local on the VM disk (the process needs fast, local access —
+a networked filesystem would be an unnecessary source of latency/locking
+risk). The Storage Account is used purely for periodic backups (a
+cron/systemd timer on the VM side — to be configured once the actual
+strategy is connected and its real state-file size/change-frequency is
+known).
 
-## Mapowanie na domeny egzaminu AZ-104
+## Mapping to AZ-104 exam domains
 
-| Domena AZ-104 | Element w tym projekcie |
+| AZ-104 domain | Element in this project |
 |---|---|
-| Manage Azure identities and governance | System-Assigned Managed Identity VM; role assignments (RBAC) do Key Vault i Storage Account; tagi i nazewnictwo zasobów w `main.bicep`; OIDC federated credential zamiast client secret |
-| Implement and manage storage | Storage Account (`storage.bicep`) z kontenerem blob do backupu stanu SQLite, `minimumTlsVersion`, brak publicznego dostępu |
-| Deploy and manage compute resources | VM B1S (`vm.bicep`), cloud-init, Bicep jako IaC, deploy/teardown przez GitHub Actions |
-| Configure and manage virtual networking | VNet + subnet + NSG (`network.bicep`), zasady inbound/outbound, Public IP |
-| Monitor and back up Azure resources | Log Analytics Workspace, Azure Monitor Agent + VM Insights, Data Collection Rule, metric alert (`monitor.bicep`); Storage Account jako backup stanu |
+| Manage Azure identities and governance | VM System-Assigned Managed Identity; RBAC role assignments to Key Vault and Storage Account; resource naming/tagging in `main.bicep`; OIDC federated credential instead of a client secret |
+| Implement and manage storage | Storage Account (`storage.bicep`) with a blob container for SQLite state backups, `minimumTlsVersion`, no public access |
+| Deploy and manage compute resources | B1S VM (`vm.bicep`), cloud-init, Bicep as IaC, deploy/teardown via GitHub Actions |
+| Configure and manage virtual networking | VNet + subnet + NSG (`network.bicep`), inbound/outbound rules, Public IP |
+| Monitor and back up Azure resources | Log Analytics Workspace, Azure Monitor Agent + VM Insights, Data Collection Rule, metric alert (`monitor.bicep`); Storage Account as state backup |
 
-## Możliwe rozszerzenia (świadomie odłożone)
+## Possible extensions (deliberately deferred)
 
-- **Private Endpoint dla Key Vault** — obecnie `networkAcls.defaultAction:
-  Allow` dla prostoty. Do rozważenia, gdy VM będzie faktycznie przechowywać
-  sekrety produkcyjne.
-- **Zawężenie outbound NSG do adresów IP giełdy** — odłożone, bo adresy IP
-  exchange bywają niestabilne (CDN/load balancing); zawężenie groziłoby
-  przerwami w działaniu strategii bez realnego zysku bezpieczeństwa (proces
-  i tak nie ma nic wrażliwego do stracenia bez kluczy API).
-- **Azure Backup dla VM** (formalna usługa backupu, nie tylko blob z SQLite)
-  — pominięte, bo VM jest z założenia efemeryczna (deploy-on-demand); backup
-  całej maszyny nie ma sensu, gdy maszyna i tak jest odtwarzana z Bicep.
+- **Private Endpoint for Key Vault** — currently `networkAcls.defaultAction:
+  Allow` for simplicity. Worth revisiting once the VM actually stores
+  production-grade secrets.
+- **Restrict outbound NSG rules to the exchange's IP ranges** — deferred,
+  because exchange IP addresses tend to be unstable (CDN/load balancing);
+  tightening this would risk interrupting the strategy for no real
+  security gain (the process has nothing sensitive to lose anyway without
+  API keys).
+- **Azure Backup for the VM** (the formal backup service, not just a SQLite
+  blob) — skipped, because the VM is ephemeral by design (deploy-on-
+  demand); backing up the whole machine doesn't make sense when the
+  machine is reproduced from Bicep anyway.

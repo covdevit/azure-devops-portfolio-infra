@@ -1,33 +1,36 @@
 # Runbook
 
-## 0. Jednorazowy setup (zrób raz, na samym początku)
+## 0. One-time setup (do this once, at the very start)
 
-1. Załóż konto Azure (jeśli jeszcze nie masz) — 30 dni / $200 kredytu, potem
-   12 miesięcy Always Free na wybrane zasoby (patrz `README.md`).
-2. Zainstaluj lokalnie `az cli` i zaloguj się: `az login`.
-3. Wygeneruj parę kluczy SSH, jeśli nie masz: `ssh-keygen -t ed25519 -C
-   "azure-trading-vm"`.
-4. Utwórz dwa repozytoria na GitHub: publiczne `azure-devops-portfolio-infra`
-   (zawartość tego katalogu) i prywatne `trading-strategy-azure` (na razie
-   pusty stub — patrz `strategy-private-stub/` w dostarczonej paczce).
-5. Uruchom `scripts/bootstrap-oidc.sh` (edytuj najpierw zmienne
-   `GITHUB_ORG`/`GITHUB_REPO` na górze pliku).
-6. W ustawieniach publicznego repo (Settings → Secrets and variables →
+1. Create an Azure account (if you don't have one) — 30 days / $200 in
+   credit, then 12 months of Always Free on selected resources (see
+   `README.md`).
+2. Install `az cli` locally and log in: `az login`.
+3. Generate an SSH key pair if you don't already have one: `ssh-keygen -t
+   ed25519 -C "azure-trading-vm"`.
+4. Create two repos on GitHub: public `azure-devops-portfolio-infra`
+   (contents of this directory) and private `trading-strategy-azure`
+   (empty stub for now — see `strategy-private-stub/` in the delivered
+   package).
+5. Run `scripts/bootstrap-oidc.sh` (first edit the `GITHUB_ORG`/
+   `GITHUB_REPO` variables at the top of the file).
+6. In the public repo's settings (Settings → Secrets and variables →
    Actions):
    - **Variables**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
-     `AZURE_SUBSCRIPTION_ID` (ze skryptu bootstrap), `ADMIN_SOURCE_IP`
-     (twój publiczny IP w formacie `x.x.x.x/32` — sprawdź np. `curl
-     ifconfig.me`), `ADMIN_SSH_PUBLIC_KEY` (zawartość `~/.ssh/id_ed25519.pub`),
-     `STRATEGY_REPO` (np. `twoj-user/trading-strategy-azure`).
-   - **Secrets**: `STRATEGY_REPO_PAT` (fine-grained PAT z uprawnieniem
-     "Contents: Read" TYLKO do repo strategii), `VM_SSH_PRIVATE_KEY`
-     (zawartość `~/.ssh/id_ed25519`, **prywatny** klucz).
+     `AZURE_SUBSCRIPTION_ID` (from the bootstrap script), `ADMIN_SOURCE_IP`
+     (your public IP in `x.x.x.x/32` format — check with e.g. `curl
+     ifconfig.me`), `ADMIN_SSH_PUBLIC_KEY` (contents of
+     `~/.ssh/id_ed25519.pub`), `STRATEGY_REPO` (e.g.
+     `your-user/trading-strategy-azure`).
+   - **Secrets**: `STRATEGY_REPO_PAT` (fine-grained PAT with "Contents:
+     Read" on the strategy repo ONLY), `VM_SSH_PRIVATE_KEY` (contents of
+     `~/.ssh/id_ed25519`, the **private** key).
 
-## 1. Deploy infrastruktury
+## 1. Deploy the infrastructure
 
 GitHub UI: **Actions → Deploy infrastructure → Run workflow**.
 
-Ręcznie (lokalnie, do debugowania):
+Manually (locally, for debugging):
 
 ```bash
 az deployment sub create \
@@ -38,46 +41,46 @@ az deployment sub create \
   --parameters adminSshPublicKey="$(cat ~/.ssh/id_ed25519.pub)"
 ```
 
-Po zakończeniu zapisz adres IP z outputu (`vmPublicIp`) — potrzebny do
-kroku 3 i do SSH.
+Once it's done, note the IP address from the output (`vmPublicIp`) — you
+need it for step 3 and for SSH.
 
 ```bash
 az deployment sub show --name <deploymentName> --query properties.outputs
 ```
 
-## 2. Weryfikacja po deployu
+## 2. Verify after deployment
 
 ```bash
-# SSH do VM (poczekaj ~1-2 min po deployu na cloud-init)
+# SSH into the VM (wait ~1-2 minutes after deployment for cloud-init)
 ssh azadmin@<vmPublicIp>
 
-# Na VM: sprawdź czy cloud-init się zakończył i czy venv istnieje
+# On the VM: check that cloud-init finished and the venv exists
 cloud-init status --wait
 ls -la /opt/trading-strategy
 ```
 
-## 3. Wdrożenie kodu strategii
+## 3. Deploy the strategy code
 
-Wymaga gotowego kodu w prywatnym repo `trading-strategy-azure` (plik
-`strategy.py` + `requirements.txt`, patrz kontrakt w
-`strategy-private-stub/README.md`).
+Requires the code to already be ready in the private repo
+`trading-strategy-azure` (a `strategy.py` file + `requirements.txt`, see
+the contract in `strategy-private-stub/README.md`).
 
-GitHub UI: **Actions → Deploy strategy code → Run workflow**, podaj
-`vmIp` (z kroku 1).
+GitHub UI: **Actions → Deploy strategy code → Run workflow**, supplying
+`vmIp` (from step 1).
 
-Po zakończeniu:
+Once it finishes:
 
 ```bash
 ssh azadmin@<vmPublicIp> "systemctl status trading-strategy.service --no-pager"
 ```
 
-## 4. Podgląd logów w Log Analytics (zamiast tail -f)
+## 4. Viewing logs in Log Analytics (instead of tail -f)
 
-Portal Azure → Log Analytics workspace (`tradingvm-dev-law`) → Logs.
-Przykładowe zapytania KQL:
+Azure portal → Log Analytics workspace (`tradingvm-dev-law`) → Logs.
+Example KQL queries:
 
 ```kusto
-// Ostatnie logi usługi (z syslog, facility=daemon/user)
+// Recent service logs (from syslog, facility=daemon/user)
 Syslog
 | where SyslogMessage contains "trading-strategy"
 | order by TimeGenerated desc
@@ -85,32 +88,32 @@ Syslog
 ```
 
 ```kusto
-// Wykrycie restartów usługi (systemd loguje start/stop)
+// Detecting service restarts (systemd logs start/stop events)
 Syslog
 | where ProcessName == "systemd" and SyslogMessage contains "trading-strategy"
 | order by TimeGenerated desc
 ```
 
 ```kusto
-// Wykorzystanie CPU/RAM w czasie (do korelacji z ewentualnymi problemami)
+// CPU/RAM usage over time (to correlate with any issues)
 Perf
 | where ObjectName == "Processor" or ObjectName == "Memory"
 | order by TimeGenerated desc
 | take 200
 ```
 
-Alert `tradingvm-dev-low-cpu-alert` (zdefiniowany w `monitor.bicep`) odpali
-się, jeśli CPU spadnie poniżej 1% przez 30 minut — sygnał, że proces padł i
-nie wstaje mimo `Restart=always`. Skonfiguruj action group (portal → alert
-→ Add action group) żeby dostawać powiadomienie e-mail — to celowo zostawione
-poza Bicep, bo wymaga podania Twojego adresu e-mail (dane osobowe, nie
-trzymamy w publicznym repo).
+The `tradingvm-dev-low-cpu-alert` alert (defined in `monitor.bicep`) fires
+if CPU drops below 1% for 30 minutes — a signal that the process has died
+and isn't coming back up despite `Restart=always`. Set up an action group
+(portal → alert → Add action group) to get an email notification — this is
+deliberately left out of Bicep, since it requires your email address
+(personal data we don't want sitting in a public repo).
 
-## 5. Backup stanu SQLite
+## 5. Backing up the SQLite state
 
-Do skonfigurowania po podłączeniu właściwej strategii (gdy znany będzie
-rozmiar/częstotliwość zmian pliku). Szkielet (systemd timer, uruchamiany np.
-co godzinę), do dodania na VM ręcznie lub przez rozszerzenie
+To be configured once the actual strategy is connected (once the real
+file size/change frequency is known). Skeleton (a systemd timer, e.g.
+hourly), to be added on the VM manually or via an extension to
 `deploy-app.yml`:
 
 ```bash
@@ -119,49 +122,47 @@ az storage blob upload \
   --container-name strategy-state-backups \
   --name "state-$(date +%Y%m%d-%H%M%S).db" \
   --file /opt/trading-strategy/data/state.db \
-  --auth-mode login   # korzysta z Managed Identity VM, bez klucza dostępu
+  --auth-mode login   # uses the VM's Managed Identity, no access key needed
 ```
 
 ## 6. Teardown
 
-GitHub UI: **Actions → Teardown infrastructure → Run workflow**, w polu
-`confirm` wpisz dokładnie `TEARDOWN`.
+GitHub UI: **Actions → Teardown infrastructure → Run workflow**, and type
+exactly `TEARDOWN` in the `confirm` field.
 
-Ręcznie:
+Manually:
 
 ```bash
 az group delete --name tradingvm-dev-rg --yes --no-wait
 ```
 
-## 7. Łączenie repo (infra publiczne + strategia prywatna)
+## 7. Connecting the two repos (public infra + private strategy)
 
-Przepływ end-to-end po tym, jak kod strategii będzie gotowy w drugim
-czacie:
+End-to-end flow once the strategy code is ready in the other chat:
 
-1. `Deploy infrastructure` → zapisz `vmPublicIp` z outputu.
-2. Wrzuć/zaktualizuj kod w prywatnym repo `trading-strategy-azure`
+1. `Deploy infrastructure` → note the `vmPublicIp` from the output.
+2. Push/update the code in the private repo `trading-strategy-azure`
    (`strategy.py`, `requirements.txt`).
-3. `Deploy strategy code`, podając `vmIp` z kroku 1 i (opcjonalnie) branch/
-   tag strategii do wdrożenia.
-4. Krok 4 (Log Analytics) do weryfikacji, że proces faktycznie wstał i
-   loguje.
+3. `Deploy strategy code`, supplying the `vmIp` from step 1 and
+   (optionally) the branch/tag of the strategy to deploy.
+4. Step 4 (Log Analytics) to confirm the process actually started and is
+   logging.
 
-Kolejne aktualizacje samej strategii (bez zmiany infrastruktury) to tylko
-powtórzenie kroku 3 — nie trzeba re-deployować Bicep.
+Subsequent updates to just the strategy (no infrastructure changes) are
+simply a repeat of step 3 — no need to redeploy Bicep.
 
-## 8. Koszty — na co uważać
+## 8. Costs — what to watch out for
 
-- VM B1S: darmowa przez 12 mies. od założenia konta, potem ok. $7-8/mies.
-  przy pracy 24/7 — stąd model deploy-on-demand.
-- Public IP (Basic, Static): w ramach Always Free przy jednym adresie.
-- Log Analytics: pierwsze 5 GB/miesiąc darmowe w większości regionów,
-  potem płatne per GB — przy jednej małej VM raczej się nie zbliżysz do
-  limitu, ale warto pilnować `retentionInDays` (ustawione na 30, minimum
-  rozsądne dla portfolio).
-- Storage Account (Cool tier, LRS): grosze przy małych plikach backupu.
-- Key Vault: standard tier, opłata per operację (grosze przy sporadycznym
-  użyciu).
+- B1S VM: free for 12 months from account creation, then roughly
+  $7-8/month running 24/7 — hence the deploy-on-demand model.
+- Public IP (Basic, Static): covered by Always Free for a single address.
+- Log Analytics: first 5 GB/month free in most regions, then billed per
+  GB — with a single small VM you're unlikely to get close to the limit,
+  but keep an eye on `retentionInDays` (set to 30, a reasonable minimum for
+  a portfolio project).
+- Storage Account (Cool tier, LRS): pennies for small backup files.
+- Key Vault: standard tier, billed per operation (pennies for occasional use).
 
-Po każdym teardown sprawdź w portalu **Cost Management** czy resource group
-faktycznie zniknęła (usunięcie `--no-wait` działa w tle, może potrwać kilka
-minut).
+After each teardown, check **Cost Management** in the portal to confirm
+the resource group has actually disappeared (`--no-wait` deletes in the
+background, which can take a few minutes).

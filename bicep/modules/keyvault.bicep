@@ -1,29 +1,29 @@
 // keyvault.bicep
-// Key Vault dostępny wyłącznie przez RBAC (nie legacy access policies) —
-// zgodnie z obecnymi rekomendacjami Azure i tym, co jest testowane na AZ-104
-// (domena: Manage Azure identities and governance).
+// Key Vault accessible exclusively via RBAC (not legacy access policies) —
+// matching current Azure best practice and what's tested on AZ-104
+// (domain: Manage Azure identities and governance).
 //
-// Sekrety NIE są tu tworzone z poziomu Bicep (nie chcemy kluczy API w stanie
-// deploymentu / w historii Git). Jeśli strategia będzie potrzebować kluczy,
-// wrzuca się je ręcznie (`az keyvault secret set`) PO wdrożeniu, jednorazowo,
-// z lokalnej maszyny administratora — patrz docs/RUNBOOK.md.
+// Secrets are NOT created here in Bicep (we don't want API keys sitting in
+// deployment state or Git history). If the strategy ends up needing keys,
+// they're added manually (`az keyvault secret set`) AFTER deployment, once,
+// from the administrator's local machine — see docs/RUNBOOK.md.
 
-@description('Region wdrożenia')
+@description('Deployment region')
 param location string
 
-@description('Prefiks nazw zasobów')
+@description('Resource name prefix')
 param namePrefix string
 
-@description('Principal ID tożsamości zarządzanej VM, która ma dostęp do odczytu sekretów')
+@description('Principal ID of the VM managed identity that gets read access to secrets')
 param vmPrincipalId string
 
-@description('Tagi wspólne')
+@description('Common tags')
 param tags object
 
-// Nazwa Key Vault musi być globalnie unikalna w Azure — dorzucamy unikalny
-// sufiks wyliczony z resource group ID, żeby powtórne deploye (deploy →
-// teardown → deploy) nie kolidowały z nazwą "zarezerwowaną" po usuniętym
-// vaultcie (Key Vault ma soft-delete domyślnie na 90 dni).
+// Key Vault names must be globally unique across Azure — we append a
+// unique suffix derived from the resource group ID, so that repeated
+// deploys (deploy → teardown → deploy) don't collide with a name "reserved"
+// by a deleted vault (Key Vault soft-deletes by default for 90 days).
 var uniqueSuffix = uniqueString(resourceGroup().id)
 var keyVaultName = take('${namePrefix}-kv-${uniqueSuffix}', 24)
 
@@ -39,17 +39,18 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     tenantId: subscription().tenantId
     enableRbacAuthorization: true
     enableSoftDelete: true
-    softDeleteRetentionInDays: 7 // minimum — to jest infra deploy-on-demand, nie produkcja
-    enablePurgeProtection: false // celowo false: musimy móc `az keyvault purge` przy szybkich iteracjach teardown/deploy
+    softDeleteRetentionInDays: 7 // minimum allowed — this is deploy-on-demand infra, not production
+    enablePurgeProtection: false // deliberately false: we need to be able to `az keyvault purge` during fast teardown/deploy cycles
     networkAcls: {
-      defaultAction: 'Allow' // uproszczenie na start; patrz docs/ARCHITECTURE.md "możliwe rozszerzenia" dla private endpoint
+      defaultAction: 'Allow' // simplification for now; see docs/ARCHITECTURE.md "possible extensions" for a private endpoint
       bypass: 'AzureServices'
     }
   }
 }
 
-// Rola "Key Vault Secrets User" (czytanie sekretów) dla Managed Identity VM.
-// Built-in role ID jest stały w całym Azure: 4633458b-17de-408a-b874-0445c86b69e6
+// "Key Vault Secrets User" role (read secrets) for the VM's managed
+// identity. Built-in role ID is constant across all of Azure:
+// 4633458b-17de-408a-b874-0445c86b69e6
 resource secretsUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(keyVault.id, vmPrincipalId, 'KeyVaultSecretsUser')
   scope: keyVault

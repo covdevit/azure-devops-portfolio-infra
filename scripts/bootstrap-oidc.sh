@@ -1,44 +1,45 @@
 #!/usr/bin/env bash
 # bootstrap-oidc.sh
 #
-# Jednorazowy setup: pozwala GitHub Actions logować się do Azure przez OIDC
-# (OpenID Connect federated credential), BEZ przechowywania długożyjącego
-# sekretu (client secret) w GitHub Secrets. To najlepsza praktyka Azure IAM
-# (AZ-104 domena: Manage Azure identities and governance) i jest wprost
-# lepsza niż klasyczny `az ad sp create-for-rbac --sdk-auth` ze
-# zdeponowanym sekretem.
+# One-time setup: lets GitHub Actions log in to Azure via OIDC (OpenID
+# Connect federated credential), WITHOUT storing a long-lived secret
+# (client secret) in GitHub Secrets. This is Azure IAM best practice
+# (AZ-104 domain: Manage Azure identities and governance) and is
+# straightforwardly better than the classic
+# `az ad sp create-for-rbac --sdk-auth` with a stored secret.
 #
-# Uruchom RĘCZNIE, RAZ, z lokalnego `az cli` zalogowanego jako właściciel
-# subskrypcji. Nie jest to część automatycznego deploymentu.
+# Run MANUALLY, ONCE, from a local `az cli` session logged in as the
+# subscription owner. This is not part of the automated deployment.
 #
-# Wymaga: az cli zalogowane (`az login`), uprawnienia Owner albo
-# User Access Administrator + Application Administrator na subskrypcji.
+# Requires: az cli logged in (`az login`), Owner or
+# User Access Administrator + Application Administrator rights on the subscription.
 
 set -euo pipefail
 
-# ---- do wypełnienia przed uruchomieniem ----
-GITHUB_ORG="TWOJ_GITHUB_USERNAME_LUB_ORG"
+# ---- fill these in before running ----
+GITHUB_ORG="YOUR_GITHUB_USERNAME_OR_ORG"
 GITHUB_REPO="azure-devops-portfolio-infra"
 APP_NAME="gh-actions-${GITHUB_REPO}"
-# ---------------------------------------------
+# ---------------------------------------
 
-echo "==> Tworzę Azure AD App Registration + Service Principal: ${APP_NAME}"
+echo "==> Creating Azure AD App Registration + Service Principal: ${APP_NAME}"
 APP_ID=$(az ad app create --display-name "${APP_NAME}" --query appId -o tsv)
 az ad sp create --id "${APP_ID}" >/dev/null
 
 SUBSCRIPTION_ID=$(az account show --query id -o tsv)
 TENANT_ID=$(az account show --query tenantId -o tsv)
 
-echo "==> Nadaję rolę Contributor na poziomie subskrypcji"
-# Uwaga: Contributor na całej subskrypcji jest szerokie. Dla portfolio to
-# akceptowalne uproszczenie (subskrypcja jest dedykowana temu projektowi);
-# w środowisku firmowym zawężyłbyś scope do konkretnej resource group.
+echo "==> Granting Contributor role at the subscription level"
+# Note: Contributor on the whole subscription is broad. Acceptable
+# simplification for a portfolio project (the subscription is dedicated to
+# this project); in a corporate environment you'd scope this down to a
+# specific resource group.
 az role assignment create \
   --assignee "${APP_ID}" \
   --role "Contributor" \
   --scope "/subscriptions/${SUBSCRIPTION_ID}"
 
-echo "==> Rejestruję federated credential dla workflow_dispatch na branchu main"
+echo "==> Registering federated credential for workflow_dispatch on the main branch"
 az ad app federated-credential create \
   --id "${APP_ID}" \
   --parameters "{
@@ -48,9 +49,9 @@ az ad app federated-credential create \
     \"audiences\": [\"api://AzureADTokenExchange\"]
   }"
 
-# Drugi federated credential: dopuszcza uruchamianie workflow_dispatch
-# niezależnie od tego, z jakiego brancha (przydatne przy iteracji na branchu
-# feature). Usuń, jeśli chcesz twardo ograniczyć do main.
+# Second federated credential: allows workflow_dispatch runs regardless of
+# which branch triggers them (useful while iterating on a feature branch).
+# Remove this if you want to hard-restrict to main only.
 az ad app federated-credential create \
   --id "${APP_ID}" \
   --parameters "{
@@ -61,13 +62,14 @@ az ad app federated-credential create \
   }"
 
 echo ""
-echo "==> Gotowe. Dodaj te trzy WARTOŚCI (nie sekrety!) w GitHub:"
+echo "==> Done. Add these three VALUES (not secrets!) in GitHub:"
 echo "    Settings -> Secrets and variables -> Actions -> Variables tab"
 echo ""
 echo "    AZURE_CLIENT_ID       = ${APP_ID}"
 echo "    AZURE_TENANT_ID       = ${TENANT_ID}"
 echo "    AZURE_SUBSCRIPTION_ID = ${SUBSCRIPTION_ID}"
 echo ""
-echo "    To NIE są sekrety (bez nich token OIDC i tak nic nie zdziała bez"
-echo "    federated credential powyżej) — świadomie jako repository"
-echo "    variables, nie encrypted secrets, żeby były widoczne w publicznym repo."
+echo "    These are NOT secrets (the OIDC token is useless without the"
+echo "    federated credential above, even if someone saw these values) —"
+echo "    deliberately stored as repository variables, not encrypted"
+echo "    secrets, so they stay visible in a public repo."

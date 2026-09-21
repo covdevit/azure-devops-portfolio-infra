@@ -1,27 +1,27 @@
 // main.bicep
-// Punkt wejścia deploymentu. Subscription-scope, bo SAM tworzy resource
-// group (żeby jedna komenda `az deployment sub create` postawiła
-// wszystko od zera — zgodnie z modelem "deploy na żądanie").
+// Deployment entry point. Subscription-scope, because it creates the
+// resource group ITSELF (so a single `az deployment sub create` command
+// stands up everything from scratch — matching the "deploy-on-demand" model).
 //
-// Uruchamiane przez: az deployment sub create --location <region>
+// Run with: az deployment sub create --location <region>
 //   --template-file bicep/main.bicep --parameters bicep/parameters/main.parameters.json
-// (patrz docs/RUNBOOK.md dla pełnej komendy i przez workflow deploy.yml)
+// (see docs/RUNBOOK.md for the full command, and the deploy.yml workflow)
 
 targetScope = 'subscription'
 
-@description('Region wdrożenia wszystkich zasobów')
+@description('Deployment region for all resources')
 param location string = 'polandcentral'
 
-@description('Nazwa środowiska — trafia do nazw zasobów i tagów, np. dev, portfolio')
+@description('Environment name — used in resource names and tags, e.g. dev, portfolio')
 param environmentName string = 'dev'
 
-@description('Publiczny adres IP administratora dopuszczony do SSH (CIDR, np. 203.0.113.4/32) — WYMAGANE, brak sensownego default')
+@description('Admin public IP allowed for SSH (CIDR, e.g. 203.0.113.4/32) — REQUIRED, no sensible default')
 param adminSourceIp string
 
-@description('Publiczny klucz SSH administratora (zawartość pliku .pub)')
+@description('Admin SSH public key (contents of the .pub file)')
 param adminSshPublicKey string
 
-@description('Nazwa użytkownika administratora VM')
+@description('VM admin username')
 param adminUsername string = 'azadmin'
 
 var namePrefix = 'tradingvm-${environmentName}'

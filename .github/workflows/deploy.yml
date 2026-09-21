@@ -1,32 +1,32 @@
 name: Deploy infrastructure
 
-# Ręczne uruchomienie — to jest model "deploy na żądanie", nie ciągłe
-# działanie. Uruchamiasz, gdy chcesz mieć VM stojącą (np. testujesz
-# strategię), zdejmujesz przez teardown.yml, gdy skończyłeś.
+# Manually triggered — this is the "deploy-on-demand" model, not something
+# that runs continuously. You trigger it whenever you want the VM up (e.g.
+# to test the strategy), and tear it down via teardown.yml when you're done.
 on:
   workflow_dispatch:
     inputs:
       environmentName:
-        description: 'Nazwa środowiska (trafia do nazw zasobów)'
+        description: 'Environment name (used in resource names)'
         required: false
         default: 'dev'
       location:
-        description: 'Region Azure'
+        description: 'Azure region'
         required: false
         default: 'polandcentral'
 
 permissions:
-  id-token: write   # wymagane do wymiany tokenu OIDC z Azure AD
+  id-token: write   # required to exchange the OIDC token with Azure AD
   contents: read
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: production  # opcjonalnie: skonfiguruj required reviewers w Settings -> Environments
+    environment: production  # optional: configure required reviewers under Settings -> Environments
     steps:
       - uses: actions/checkout@v4
 
-      - name: Log in to Azure (OIDC, bez client secret)
+      - name: Log in to Azure (OIDC, no client secret)
         uses: azure/login@v2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
@@ -47,8 +47,8 @@ jobs:
             adminSshPublicKey=${{ vars.ADMIN_SSH_PUBLIC_KEY }}
           deploymentName: infra-${{ github.run_id }}
 
-      - name: Wypisz adres IP nowej VM
+      - name: Print the new VM's IP address
         run: |
-          echo "### Deployment zakończony" >> "$GITHUB_STEP_SUMMARY"
-          echo "Sprawdź output 'vmPublicIp' w kroku powyżej (Azure/arm-deploy)." >> "$GITHUB_STEP_SUMMARY"
-          echo "Albo: az deployment sub show --name infra-${{ github.run_id }} --query properties.outputs" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Deployment complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "Check the 'vmPublicIp' output in the step above (Azure/arm-deploy)." >> "$GITHUB_STEP_SUMMARY"
+          echo "Or: az deployment sub show --name infra-${{ github.run_id }} --query properties.outputs" >> "$GITHUB_STEP_SUMMARY"

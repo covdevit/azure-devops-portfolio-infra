@@ -1,25 +1,25 @@
 // monitor.bicep
-// Log Analytics Workspace + Azure Monitor Agent (VM Insights) + jeden
-// przykładowy alert — scentralizowane logi i metryki zamiast `tail -f` na
-// dysku VM (jak było w Oracle). AZ-104 domena: Monitor and back up Azure
-// resources.
+// Log Analytics Workspace + Azure Monitor Agent (VM Insights) + one
+// example alert — centralized logs and metrics instead of `tail -f` on
+// the VM's disk (as it was on Oracle). AZ-104 domain: Monitor and back up
+// Azure resources.
 
-@description('Region wdrożenia')
+@description('Deployment region')
 param location string
 
-@description('Prefiks nazw zasobów')
+@description('Resource name prefix')
 param namePrefix string
 
-@description('Resource ID monitorowanej VM')
+@description('Resource ID of the monitored VM')
 param vmId string
 
-@description('Nazwa monitorowanej VM (do scope alertu)')
+@description('Name of the monitored VM (for alert scope)')
 param vmName string
 
-@description('Tagi wspólne')
+@description('Common tags')
 param tags object
 
-@description('Przechowywanie logów w dniach — 30 to minimum płatne, ale wystarczające dla portfolio/dev')
+@description('Log retention in days — 30 is the paid minimum, but plenty for a portfolio/dev project')
 param retentionInDays int = 30
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
@@ -34,8 +34,8 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   }
 }
 
-// Azure Monitor Agent na VM — zbiera metryki systemowe (CPU/RAM/dysk/sieć)
-// i (po skonfigurowaniu Data Collection Rule) logi aplikacji.
+// Azure Monitor Agent on the VM — collects system metrics (CPU/RAM/disk/
+// network) and (once a Data Collection Rule is configured) application logs.
 resource amaExtension 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = {
   name: '${vmName}/AzureMonitorLinuxAgent'
   location: location
@@ -47,9 +47,9 @@ resource amaExtension 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' 
   }
 }
 
-// Data Collection Rule: co dokładnie zbieramy z VM (metryki wydajności +
-// syslog, w tym logi naszej usługi systemd, które trafiają do dziennika
-// systemowego przez journald / syslog).
+// Data Collection Rule: exactly what we collect from the VM (performance
+// counters + syslog, including our systemd service's logs, which land in
+// the system log via journald / syslog).
 resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
   name: '${namePrefix}-dcr'
   location: location
@@ -127,11 +127,11 @@ resource dcra 'Microsoft.Insights/dataCollectionRuleAssociations@2023-03-11' = {
   }
 }
 
-// Alert: proces strategii powinien zawsze zużywać trochę CPU (pętla
-// WebSocketa); jeśli CPU spadnie blisko zera na dłużej, to sygnał, że
-// usługa systemd padła i nie wstała (mimo Restart=always — np. crashloop
-// z błędem konfiguracji). Prostszy i bardziej wiarygodny sygnał niż
-// pilnowanie samego stanu usługi przez agenta.
+// Alert: the strategy process should always be burning a bit of CPU (the
+// WebSocket loop). If CPU stays near zero for a while, that's a signal the
+// systemd service has died and hasn't come back up (e.g. a crash loop from
+// a config error, despite Restart=always). Simpler and more reliable
+// signal than watching the systemd service state directly.
 resource lowCpuAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
   name: '${namePrefix}-low-cpu-alert'
   location: 'global'

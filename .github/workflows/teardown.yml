@@ -1,18 +1,18 @@
 name: Teardown infrastructure
 
-# Usuwa całą resource group (a więc wszystkie zasoby w środku) jedną
-# komendą. To druga połowa modelu "deploy na żądanie" — uruchamiasz to
-# zaraz po tym, jak skończyłeś z VM, żeby nie zużywać darmowego limitu
-# / nie generować kosztów.
+# Deletes the entire resource group (and therefore every resource inside
+# it) with a single command. This is the other half of the "deploy-on-
+# demand" model — run it as soon as you're done with the VM, so you don't
+# burn through the free-tier allowance / rack up charges.
 on:
   workflow_dispatch:
     inputs:
       environmentName:
-        description: 'Nazwa środowiska do usunięcia (musi się zgadzać z tym użytym przy deployu)'
+        description: 'Environment name to tear down (must match the one used at deploy time)'
         required: false
         default: 'dev'
       confirm:
-        description: 'Wpisz dokładnie: TEARDOWN  (zabezpieczenie przed przypadkowym usunięciem)'
+        description: 'Type exactly: TEARDOWN  (safeguard against accidental deletion)'
         required: true
 
 permissions:
@@ -24,10 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Sprawdź potwierdzenie
+      - name: Check confirmation
         run: |
           if [ "${{ github.event.inputs.confirm }}" != "TEARDOWN" ]; then
-            echo "::error::Pole 'confirm' musi zawierać dokładnie słowo TEARDOWN. Przerywam."
+            echo "::error::The 'confirm' field must contain exactly the word TEARDOWN. Aborting."
             exit 1
           fi
 
@@ -38,17 +38,17 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Usuń resource group
+      - name: Delete resource group
         run: |
           RG_NAME="tradingvm-${{ github.event.inputs.environmentName }}-rg"
-          echo "Usuwam resource group: $RG_NAME"
+          echo "Deleting resource group: $RG_NAME"
           az group delete --name "$RG_NAME" --yes --no-wait
-          echo "Usunięcie zlecone (--no-wait) — Azure kasuje w tle, sprawdź w portalu za kilka minut." >> "$GITHUB_STEP_SUMMARY"
+          echo "Deletion requested (--no-wait) — Azure deletes in the background, check the portal in a few minutes." >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Wyczyść Key Vault (soft-delete)
+      - name: Clean up Key Vault (soft-delete)
         run: |
-          echo "Uwaga: Key Vault ma soft-delete (7 dni). Jeśli chcesz od razu"
-          echo "zwolnić nazwę (np. przy szybkim redeploy w tym samym dniu), odkomentuj:"
-          echo "# az keyvault purge --name <nazwa-kv> --location <region>"
-          echo "Nazwa Key Vault zawiera losowy suffix (uniqueString), więc"
-          echo "kolizja nazw przy kolejnym deployu jest mało prawdopodobna nawet bez purge."
+          echo "Note: Key Vault has soft-delete enabled (7 days). If you want to"
+          echo "free up the name immediately (e.g. for a quick redeploy the same day), uncomment:"
+          echo "# az keyvault purge --name <kv-name> --location <region>"
+          echo "The Key Vault name includes a random suffix (uniqueString), so a"
+          echo "name collision on the next deploy is unlikely even without purging."

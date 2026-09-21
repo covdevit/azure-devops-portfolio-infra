@@ -1,21 +1,22 @@
 name: Deploy strategy code
 
-# Wdraża kod z PRYWATNEGO repo (trading-strategy-azure) na już istniejącą
-# VM. Odpowiednik "git pull + systemctl restart", które robiliśmy ręcznie
-# w Oracle — tutaj to jeden klik (workflow_dispatch), zgodnie z sekcją 4
-# konspektu ("CI/CD przez GitHub Actions zamiast ręcznego git pull").
+# Deploys code from the PRIVATE repo (trading-strategy-azure) onto an
+# already-existing VM. The equivalent of the manual "git pull +
+# systemctl restart" we used to do on Oracle — here it's a single click
+# (workflow_dispatch), per section 4 of the original outline ("CI/CD via
+# GitHub Actions instead of manual git pull").
 #
-# WYMAGA wcześniejszego `Deploy infrastructure` (VM musi już istnieć) —
-# to osobny, świadomy krok, bo VM jest deploy-on-demand i jej adres IP
-# zmienia się przy każdym redeployu.
+# REQUIRES "Deploy infrastructure" to have already run (the VM must
+# already exist) — this is a deliberate, separate step, since the VM is
+# deploy-on-demand and its IP address changes on every redeploy.
 on:
   workflow_dispatch:
     inputs:
       vmIp:
-        description: 'Publiczny adres IP VM (output "vmPublicIp" z workflow Deploy infrastructure)'
+        description: 'VM public IP address (the "vmPublicIp" output from the Deploy infrastructure workflow)'
         required: true
       strategyRepoRef:
-        description: 'Branch/tag/commit w prywatnym repo strategii do wdrożenia'
+        description: 'Branch/tag/commit in the private strategy repo to deploy'
         required: false
         default: 'main'
 
@@ -34,12 +35,12 @@ jobs:
       - name: Checkout private strategy repo
         uses: actions/checkout@v4
         with:
-          repository: ${{ vars.STRATEGY_REPO }}   # np. "twoj-user/trading-strategy-azure"
+          repository: ${{ vars.STRATEGY_REPO }}   # e.g. "your-user/trading-strategy-azure"
           ref: ${{ github.event.inputs.strategyRepoRef }}
-          token: ${{ secrets.STRATEGY_REPO_PAT }}  # fine-grained PAT, tylko "Contents: Read" na tym jednym repo
+          token: ${{ secrets.STRATEGY_REPO_PAT }}  # fine-grained PAT, "Contents: Read" on this one repo only
           path: strategy
 
-      - name: Skopiuj kod strategii na VM (przez SCP)
+      - name: Copy strategy code to the VM (via SCP)
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ github.event.inputs.vmIp }}
@@ -49,7 +50,7 @@ jobs:
           target: '/tmp/deploy-staging'
           strip_components: 0
 
-      - name: Zainstaluj zależności i zrestartuj usługę
+      - name: Install dependencies and restart the service
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ github.event.inputs.vmIp }}
@@ -58,15 +59,15 @@ jobs:
           script: |
             set -euo pipefail
 
-            # Kod aplikacji -> /opt/trading-strategy (utworzone przez cloud-init w vm.bicep)
+            # Application code -> /opt/trading-strategy (created by cloud-init in vm.bicep)
             sudo rsync -a --delete /tmp/deploy-staging/strategy/ /opt/trading-strategy/ \
               --exclude '.git' --exclude 'README.md'
 
-            # systemd unit -> /etc/systemd/system (idempotentne: nadpisuje, jeśli już istnieje)
+            # systemd unit -> /etc/systemd/system (idempotent: overwrites if it already exists)
             sudo cp /tmp/deploy-staging/infra/systemd/trading-strategy.service \
               /etc/systemd/system/trading-strategy.service
 
-            # Zależności Pythona w venv przygotowanym przez cloud-init
+            # Python dependencies in the venv prepared by cloud-init
             if [ -f /opt/trading-strategy/requirements.txt ]; then
               sudo /opt/trading-strategy/venv/bin/pip install -r /opt/trading-strategy/requirements.txt
             fi
@@ -81,7 +82,7 @@ jobs:
             sudo systemctl status trading-strategy.service --no-pager
             rm -rf /tmp/deploy-staging
 
-      - name: Podsumowanie
+      - name: Summary
         run: |
-          echo "### Wdrożono strategię (ref: ${{ github.event.inputs.strategyRepoRef }}) na ${{ github.event.inputs.vmIp }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Sprawdź logi: patrz docs/RUNBOOK.md sekcja 'Podgląd logów w Log Analytics'." >> "$GITHUB_STEP_SUMMARY"
+          echo "### Deployed strategy (ref: ${{ github.event.inputs.strategyRepoRef }}) to ${{ github.event.inputs.vmIp }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Check the logs: see docs/RUNBOOK.md, 'Viewing logs in Log Analytics'." >> "$GITHUB_STEP_SUMMARY"

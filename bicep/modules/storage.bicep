@@ -1,23 +1,24 @@
 // storage.bicep
-// Storage Account do backupu pliku SQLite (stan strategii) i archiwum
-// logów — AZ-104 domena: Implement and manage storage. Nie jest to hot path
-// aplikacji (proces pisze lokalnie do SQLite na dysku VM), tylko cel
-// okresowego backupu (cron/systemd timer po stronie VM, patrz RUNBOOK).
+// Storage Account for SQLite backups (strategy state) and log archiving —
+// AZ-104 domain: Implement and manage storage. Not on the application's
+// hot path (the process writes locally to SQLite on the VM disk), only a
+// target for periodic backups (cron/systemd timer on the VM side, see
+// RUNBOOK).
 
-@description('Region wdrożenia')
+@description('Deployment region')
 param location string
 
-@description('Prefiks nazw zasobów')
+@description('Resource name prefix')
 param namePrefix string
 
-@description('Tagi wspólne')
+@description('Common tags')
 param tags object
 
-@description('Principal ID tożsamości zarządzanej VM — dostaje uprawnienia do zapisu backupów')
+@description('Principal ID of the VM managed identity — gets permission to write backups')
 param vmPrincipalId string
 
 var uniqueSuffix = uniqueString(resourceGroup().id)
-// Nazwa Storage Account: tylko małe litery i cyfry, max 24 znaki, globalnie unikalna
+// Storage account name: lowercase letters and digits only, max 24 chars, globally unique
 var storageAccountName = take(toLower('${replace(namePrefix, '-', '')}st${uniqueSuffix}'), 24)
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
@@ -25,13 +26,13 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   location: location
   tags: tags
   sku: {
-    name: 'Standard_LRS' // LRS wystarcza — to backup drugorzędny, nie jedyna kopia danych
+    name: 'Standard_LRS' // LRS is enough — this is a secondary backup, not the only copy of the data
   }
   kind: 'StorageV2'
   properties: {
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
-    accessTier: 'Cool' // backupy odczytywane rzadko
+    accessTier: 'Cool' // backups are read rarely
   }
 }
 
@@ -48,9 +49,9 @@ resource backupContainer 'Microsoft.Storage/storageAccounts/blobServices/contain
   }
 }
 
-// Rola "Storage Blob Data Contributor" (built-in role ID stały w Azure:
-// ba92f5b4-2d11-453d-a403-e96b0029c9fe) — VM może zapisywać/odczytywać
-// backupy bez klucza dostępu do konta storage (żadnego sekretu na dysku).
+// "Storage Blob Data Contributor" role (built-in role ID constant across
+// Azure: ba92f5b4-2d11-453d-a403-e96b0029c9fe) — lets the VM write/read
+// backups without a storage account access key (no secret on disk at all).
 resource blobContributorRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(storageAccount.id, vmPrincipalId, 'StorageBlobDataContributor')
   scope: storageAccount

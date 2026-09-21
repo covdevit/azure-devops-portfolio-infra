@@ -1,90 +1,94 @@
 # azure-devops-portfolio-infra
 
-Odtwarzalna infrastruktura Azure (Bicep + GitHub Actions) pod trading-bota
-działającego jako proces I/O-bound (WebSocket + zapis stanu) na jednej małej VM.
+Reproducible Azure infrastructure (Bicep + GitHub Actions) for a trading
+bot running as an I/O-bound process (WebSocket + state persistence) on a
+single small VM.
 
-Projekt zbudowany jako portfolio DevOps + przygotowanie do certyfikatu
-**AZ-104 (Azure Administrator Associate)**. Zobacz `docs/ARCHITECTURE.md`
-dla mapowania na domeny egzaminu i uzasadnienia decyzji projektowych.
+Built as a DevOps portfolio project and as hands-on preparation for the
+**AZ-104 (Azure Administrator Associate)** certification. See
+`docs/ARCHITECTURE.md` for the mapping to exam domains and the reasoning
+behind each design decision.
 
-## Model działania: deploy na żądanie (ephemeral infra)
+## Operating model: deploy-on-demand (ephemeral infra)
 
-W przeciwieństwie do wzorca "VM działa 24/7" (jak w oryginalnym projekcie na
-Oracle Cloud), ta infrastruktura jest **zaprojektowana do stawiania i
-zdejmowania na żądanie**:
+Unlike a "VM runs 24/7" pattern (the model used by the original project on
+Oracle Cloud), this infrastructure is **designed to be stood up and torn
+down on demand**:
 
-- `deploy.yml` — stawia całą infrastrukturę jedną komendą (`az deployment sub
-  create`), bez ręcznego klikania w portalu.
-- `teardown.yml` — usuwa resource group (a więc wszystko w środku) jedną
-  komendą, gdy VM nie jest aktualnie potrzebna.
+- `deploy.yml` — provisions the entire infrastructure with a single command
+  (`az deployment sub create`), with no manual clicking in the portal.
+- `teardown.yml` — deletes the resource group (and therefore everything in
+  it) with a single command, whenever the VM isn't currently needed.
 
-To świadomy wybór z dwóch powodów:
+This is a deliberate choice for two reasons:
 
-1. **Koszt** — Azure daje VM B1S za darmo tylko przez 12 miesięcy od
-   założenia konta (nie bezterminowo jak Oracle Always Free). Zdejmowanie
-   infrastruktury, gdy nieużywana, oszczędza darmowy limit i unika kosztów po
-   jego wyczerpaniu.
-2. **Portfolio** — odtwarzalna infrastruktura sterowana z kodu ("cattle, not
-   pets") jest dokładnie tym, co pokazuje realną wartość DevOps na rozmowie
-   kwalifikacyjnej, w przeciwieństwie do maszyny postawionej ręcznie i
-   zostawionej na zawsze.
+1. **Cost** — Azure only gives away a free B1S VM for 12 months from
+   account creation (unlike Oracle Always Free, which has no time limit).
+   Tearing down the infrastructure when it's not in use stretches that free
+   allowance further and avoids charges once it runs out.
+2. **Portfolio value** — reproducible, code-driven infrastructure ("cattle,
+   not pets") is exactly what demonstrates real DevOps value in an
+   interview, as opposed to a machine that was clicked together once by
+   hand and left running forever.
 
-## Dwa repozytoria — dlaczego
+## Two repositories — why
 
-| Repo | Widoczność | Zawartość |
+| Repo | Visibility | Contents |
 |---|---|---|
-| **`azure-devops-portfolio-infra`** (to repo) | **Publiczne** | Bicep, GitHub Actions, dokumentacja architektury, systemd unit template. Zero sekretów, zero logiki tradingowej. |
-| **`trading-strategy-azure`** (osobne repo) | **Prywatne** | Właściwy kod strategii (logika wejść/wyjść, scoring). Projektowany równolegle w innym czacie. |
+| **`azure-devops-portfolio-infra`** (this repo) | **Public** | Bicep, GitHub Actions, architecture docs, systemd unit template. Zero secrets, zero trading logic. |
+| **`trading-strategy-azure`** (separate repo) | **Private** | The actual strategy code (entry/exit logic, scoring). Designed in parallel in a separate chat. |
 
-Powód rozdziału: kod infrastruktury *jest* tym, co chcesz pokazać
-pracodawcy — może być publiczny bez ryzyka. Kod strategii ma wartość tylko
-jeśli jest unikalny, więc zostaje prywatny, dokładnie jak strategia działająca
-już na Oracle.
+Reasoning: the infrastructure code *is* the thing you want to show an
+employer — it can be public with no risk. The strategy code only has value
+if it stays unique, so it stays private, exactly like the strategy already
+running on Oracle.
 
-Połączenie następuje w workflow `deploy-app.yml` (patrz `.github/workflows/`):
-publiczne repo definiuje *gdzie* i *jak* wdrożyć (infrastruktura, docelowa
-ścieżka, definicja usługi systemd), a prywatne repo dostarcza *co* wdrożyć
-(sam plik `strategy.py`). Zobacz `docs/RUNBOOK.md` sekcja "Łączenie repo".
+The two repos are wired together in the `deploy-app.yml` workflow (see
+`.github/workflows/`): the public repo defines *where* and *how* to deploy
+(infrastructure, target path, systemd service definition), while the
+private repo supplies *what* to deploy (the actual `strategy.py` file). See
+`docs/RUNBOOK.md`, section "Connecting the two repos".
 
-## Struktura repo
+## Repo layout
 
 ```
 infra-public/
 ├── bicep/
-│   ├── main.bicep              # subscription-scope, orkiestruje wszystkie moduły
+│   ├── main.bicep              # subscription-scope, orchestrates all modules
 │   ├── modules/
 │   │   ├── network.bicep       # VNet, subnet, NSG
 │   │   ├── vm.bicep            # VM B1S + Managed Identity + NIC
-│   │   ├── keyvault.bicep      # Key Vault + RBAC dla Managed Identity
+│   │   ├── keyvault.bicep      # Key Vault + RBAC for the Managed Identity
 │   │   └── monitor.bicep       # Log Analytics + VM Insights + alert
 │   └── parameters/
 │       └── main.parameters.json
 ├── .github/workflows/
-│   ├── deploy.yml               # workflow_dispatch: staw infrastrukturę
-│   ├── teardown.yml             # workflow_dispatch: zdejmij infrastrukturę
-│   └── deploy-app.yml           # wdrożenie kodu strategii na istniejącą VM
+│   ├── deploy.yml               # workflow_dispatch: stand up the infrastructure
+│   ├── teardown.yml             # workflow_dispatch: tear the infrastructure down
+│   └── deploy-app.yml           # deploy the strategy code onto the existing VM
 ├── scripts/
-│   └── bootstrap-oidc.sh        # jednorazowy setup OIDC (bez sekretów w GH)
+│   └── bootstrap-oidc.sh        # one-time OIDC setup (no secrets stored in GH)
 ├── systemd/
-│   └── trading-strategy.service # wzorzec z Oracle, przeniesiony na Azure
+│   └── trading-strategy.service # pattern carried over from Oracle
 └── docs/
-    ├── ARCHITECTURE.md          # mapowanie na domeny AZ-104
-    └── RUNBOOK.md               # jak wdrażać / zdejmować / debugować
+    ├── ARCHITECTURE.md          # mapping to AZ-104 exam domains
+    └── RUNBOOK.md                # how to deploy / tear down / debug
 ```
 
-## Szybki start
+## Quick start
 
-1. Uruchom `scripts/bootstrap-oidc.sh` **raz**, ręcznie, z lokalnego `az cli`
-   (tworzy federated credential dla GitHub Actions — patrz komentarze w
-   skrypcie co i dlaczego).
-2. Dodaj w ustawieniach repo (Settings → Secrets and variables → Actions)
-   trzy **variables** (nie secrets — to nie są sekrety): `AZURE_CLIENT_ID`,
-   `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`.
-3. Uruchom workflow **Deploy infrastructure** (Actions → Deploy infrastructure
-   → Run workflow).
-4. Gdy VM już nie jest potrzebna: workflow **Teardown infrastructure**.
-5. Gdy strategia z drugiego czatu będzie gotowa: workflow **Deploy strategy
-   code**.
+1. Run `scripts/bootstrap-oidc.sh` **once**, manually, from a local `az
+   cli` session (creates a federated credential for GitHub Actions — see
+   the comments in the script for what and why).
+2. In the repo settings (Settings → Secrets and variables → Actions) add
+   three **variables** (not secrets — these aren't sensitive):
+   `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`.
+3. Run the **Deploy infrastructure** workflow (Actions → Deploy
+   infrastructure → Run workflow).
+4. Once the VM is no longer needed: run the **Teardown infrastructure**
+   workflow.
+5. Once the strategy from the other chat is ready: run the **Deploy
+   strategy code** workflow.
 
-Szczegóły każdego kroku, w tym dokładne komendy `az cli` do ręcznej
-weryfikacji: `docs/RUNBOOK.md`.
+Full details for each step, including exact `az cli` commands for manual
+verification: `docs/RUNBOOK.md`.

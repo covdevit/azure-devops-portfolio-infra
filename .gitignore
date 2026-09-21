@@ -1,0 +1,5 @@
+*.bicepparam.local.json
+.azure/
+*.log
+__pycache__/
+.DS_Store

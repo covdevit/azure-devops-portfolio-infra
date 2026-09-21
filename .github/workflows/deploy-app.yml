@@ -1,0 +1,87 @@
+name: Deploy strategy code
+
+# Wdraża kod z PRYWATNEGO repo (trading-strategy-azure) na już istniejącą
+# VM. Odpowiednik "git pull + systemctl restart", które robiliśmy ręcznie
+# w Oracle — tutaj to jeden klik (workflow_dispatch), zgodnie z sekcją 4
+# konspektu ("CI/CD przez GitHub Actions zamiast ręcznego git pull").
+#
+# WYMAGA wcześniejszego `Deploy infrastructure` (VM musi już istnieć) —
+# to osobny, świadomy krok, bo VM jest deploy-on-demand i jej adres IP
+# zmienia się przy każdym redeployu.
+on:
+  workflow_dispatch:
+    inputs:
+      vmIp:
+        description: 'Publiczny adres IP VM (output "vmPublicIp" z workflow Deploy infrastructure)'
+        required: true
+      strategyRepoRef:
+        description: 'Branch/tag/commit w prywatnym repo strategii do wdrożenia'
+        required: false
+        default: 'main'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-app:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout infra repo (systemd unit template)
+        uses: actions/checkout@v4
+        with:
+          path: infra
+
+      - name: Checkout private strategy repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.STRATEGY_REPO }}   # np. "twoj-user/trading-strategy-azure"
+          ref: ${{ github.event.inputs.strategyRepoRef }}
+          token: ${{ secrets.STRATEGY_REPO_PAT }}  # fine-grained PAT, tylko "Contents: Read" na tym jednym repo
+          path: strategy
+
+      - name: Skopiuj kod strategii na VM (przez SCP)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ github.event.inputs.vmIp }}
+          username: azadmin
+          key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          source: 'strategy/*,infra/systemd/trading-strategy.service'
+          target: '/tmp/deploy-staging'
+          strip_components: 0
+
+      - name: Zainstaluj zależności i zrestartuj usługę
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ github.event.inputs.vmIp }}
+          username: azadmin
+          key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          script: |
+            set -euo pipefail
+
+            # Kod aplikacji -> /opt/trading-strategy (utworzone przez cloud-init w vm.bicep)
+            sudo rsync -a --delete /tmp/deploy-staging/strategy/ /opt/trading-strategy/ \
+              --exclude '.git' --exclude 'README.md'
+
+            # systemd unit -> /etc/systemd/system (idempotentne: nadpisuje, jeśli już istnieje)
+            sudo cp /tmp/deploy-staging/infra/systemd/trading-strategy.service \
+              /etc/systemd/system/trading-strategy.service
+
+            # Zależności Pythona w venv przygotowanym przez cloud-init
+            if [ -f /opt/trading-strategy/requirements.txt ]; then
+              sudo /opt/trading-strategy/venv/bin/pip install -r /opt/trading-strategy/requirements.txt
+            fi
+
+            sudo chown -R azadmin:azadmin /opt/trading-strategy
+
+            sudo systemctl daemon-reload
+            sudo systemctl enable trading-strategy.service
+            sudo systemctl restart trading-strategy.service
+
+            sleep 3
+            sudo systemctl status trading-strategy.service --no-pager
+            rm -rf /tmp/deploy-staging
+
+      - name: Podsumowanie
+        run: |
+          echo "### Wdrożono strategię (ref: ${{ github.event.inputs.strategyRepoRef }}) na ${{ github.event.inputs.vmIp }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Sprawdź logi: patrz docs/RUNBOOK.md sekcja 'Podgląd logów w Log Analytics'." >> "$GITHUB_STEP_SUMMARY"

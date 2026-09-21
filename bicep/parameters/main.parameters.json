@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "polandcentral"
+    },
+    "environmentName": {
+      "value": "dev"
+    },
+    "adminSourceIp": {
+      "value": "REPLACE_ME_WITH_YOUR_PUBLIC_IP/32"
+    },
+    "adminSshPublicKey": {
+      "value": "REPLACE_ME_WITH_CONTENTS_OF_YOUR_SSH_PUBLIC_KEY"
+    },
+    "adminUsername": {
+      "value": "azadmin"
+    }
+  }
+}

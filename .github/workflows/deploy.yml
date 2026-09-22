@@ -22,7 +22,6 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: production  # optional: configure required reviewers under Settings -> Environments
     steps:
       - uses: actions/checkout@v4
 

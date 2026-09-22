@@ -22,7 +22,6 @@ permissions:
 jobs:
   teardown:
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - name: Check confirmation
         run: |

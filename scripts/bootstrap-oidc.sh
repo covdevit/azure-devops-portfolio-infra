@@ -3,8 +3,7 @@
 #
 # One-time setup: lets GitHub Actions log in to Azure via OIDC (OpenID
 # Connect federated credential), WITHOUT storing a long-lived secret
-# (client secret) in GitHub Secrets. This is Azure IAM best practice
-# (AZ-104 domain: Manage Azure identities and governance) and is
+# (client secret) in GitHub Secrets. This is Azure IAM best practice and is
 # straightforwardly better than the classic
 # `az ad sp create-for-rbac --sdk-auth` with a stored secret.
 #
@@ -30,10 +29,9 @@ SUBSCRIPTION_ID=$(az account show --query id -o tsv)
 TENANT_ID=$(az account show --query tenantId -o tsv)
 
 echo "==> Granting Contributor role at the subscription level"
-# Note: Contributor on the whole subscription is broad. Acceptable
-# simplification for a portfolio project (the subscription is dedicated to
-# this project); in a corporate environment you'd scope this down to a
-# specific resource group.
+# Note: Contributor on the whole subscription is broad. Acceptable here
+# since the subscription is dedicated to this project; in a larger
+# environment you'd scope this down to a specific resource group.
 az role assignment create \
   --assignee "${APP_ID}" \
   --role "Contributor" \

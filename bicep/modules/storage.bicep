@@ -1,9 +1,8 @@
 // storage.bicep
-// Storage Account for SQLite backups (strategy state) and log archiving —
-// AZ-104 domain: Implement and manage storage. Not on the application's
-// hot path (the process writes locally to SQLite on the VM disk), only a
-// target for periodic backups (cron/systemd timer on the VM side, see
-// RUNBOOK).
+// Storage Account for SQLite backups (strategy state) and log archiving.
+// Not on the application's hot path (the process writes locally to SQLite
+// on the VM disk), only a target for periodic backups (cron/systemd timer
+// on the VM side, see RUNBOOK).
 
 @description('Deployment region')
 param location string

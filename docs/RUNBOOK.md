@@ -138,7 +138,7 @@ az group delete --name tradingvm-dev-rg --yes --no-wait
 
 ## 7. Connecting the two repos (public infra + private strategy)
 
-End-to-end flow once the strategy code is ready in the other chat:
+End-to-end flow once the strategy code is ready:
 
 1. `Deploy infrastructure` → note the `vmPublicIp` from the output.
 2. Push/update the code in the private repo `trading-strategy-azure`
@@ -153,13 +153,23 @@ simply a repeat of step 3 — no need to redeploy Bicep.
 
 ## 8. Costs — what to watch out for
 
-- B1S VM: free for 12 months from account creation, then roughly
-  $7-8/month running 24/7 — hence the deploy-on-demand model.
-- Public IP (Basic, Static): covered by Always Free for a single address.
+- VM: `Standard_B2s_v2`, not the free-tier `B1s` — this subscription
+  can't use the classic B-series family in Poland Central (see
+  `docs/ARCHITECTURE.md`), so this is a real (small) cost rather than
+  covered by the 12-month free grant. Check the current pay-as-you-go
+  price for `Standard_B2s_v2` in Poland Central in the Azure Pricing
+  Calculator before leaving it running for long stretches — this is
+  exactly why the deploy-on-demand model matters here: you're billed only
+  for the hours the VM actually exists, not a flat monthly rate.
+- Public IP (Standard, Static): Basic SKU public IPs were retired by
+  Azure (30 Sept 2025) and can no longer be created at all — Standard is
+  now the only option and isn't covered by Always Free either, but the
+  cost is small (a few cents/hour at most) and, again, only billed while
+  the VM exists under the deploy-on-demand model.
 - Log Analytics: first 5 GB/month free in most regions, then billed per
   GB — with a single small VM you're unlikely to get close to the limit,
   but keep an eye on `retentionInDays` (set to 30, a reasonable minimum for
-  a portfolio project).
+  a small-scale deployment).
 - Storage Account (Cool tier, LRS): pennies for small backup files.
 - Key Vault: standard tier, billed per operation (pennies for occasional use).
 

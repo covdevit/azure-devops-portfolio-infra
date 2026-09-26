@@ -1,7 +1,7 @@
 // keyvault.bicep
 // Key Vault accessible exclusively via RBAC (not legacy access policies) —
-// matching current Azure best practice and what's tested on AZ-104
-// (domain: Manage Azure identities and governance).
+// current Azure best practice for secret management, in place of legacy
+// access policies.
 //
 // Secrets are NOT created here in Bicep (we don't want API keys sitting in
 // deployment state or Git history). If the strategy ends up needing keys,

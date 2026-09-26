@@ -1,8 +1,7 @@
 // monitor.bicep
 // Log Analytics Workspace + Azure Monitor Agent (VM Insights) + one
 // example alert — centralized logs and metrics instead of `tail -f` on
-// the VM's disk (as it was on Oracle). AZ-104 domain: Monitor and back up
-// Azure resources.
+// the VM's disk (as it was on Oracle).
 
 @description('Deployment region')
 param location string
@@ -19,7 +18,7 @@ param vmName string
 @description('Common tags')
 param tags object
 
-@description('Log retention in days — 30 is the paid minimum, but plenty for a portfolio/dev project')
+@description('Log retention in days — 30 is the paid minimum, sufficient for a small-scale deployment')
 param retentionInDays int = 30
 
 // Reference to the already-deployed VM, needed below to scope the Data

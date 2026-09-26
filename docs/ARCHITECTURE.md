@@ -47,9 +47,9 @@ continuously. Reasons:
   — unlike Oracle Always Free, which has no time limit. Keeping a VM up
   24/7 for the whole year burns through that allowance for good;
   deploy-on-demand lets the free period stretch across more actual usage.
-- Reproducible, code-driven infrastructure is exactly what has value in a
-  DevOps portfolio — a VM that was clicked together by hand and left
-  running forever doesn't demonstrate that.
+- Reproducible, code-driven infrastructure can be recreated identically at
+  any time, rather than depending on a machine that was configured once by
+  hand and left running indefinitely.
 - Side effect: you need to remember to tear down and redeploy, and the
   VM's IP address changes on every cycle (the public IP is recreated each
   time). This is a deliberate trade-off — `deploy-app.yml` takes the IP
@@ -57,8 +57,8 @@ continuously. Reasons:
 
 ### Bicep instead of Terraform/ARM JSON
 
-Bicep is native to Azure and maps directly onto AZ-104 material (the exam
-expects familiarity with ARM templates/Bicep, not Terraform).
+Bicep is native to Azure and compiles directly to ARM templates without
+requiring an external state file, unlike Terraform.
 Subscription-scope (`targetScope = 'subscription'`) in `main.bicep` lets a
 single command create both the resource group and everything inside it —
 no separate manual step to "create the RG in the portal first".
@@ -158,7 +158,7 @@ create a narrow **custom role** with only
 
 ```bash
 az role definition create --role-definition '{
-  "Name": "Portfolio Constrained Role Assignment Writer",
+  "Name": "Constrained Role Assignment Writer",
   "IsCustom": true,
   "Actions": [
     "Microsoft.Authorization/roleAssignments/write",
@@ -171,7 +171,7 @@ az role definition create --role-definition '{
 
 az role assignment create \
   --assignee <deployment-identity-object-id> \
-  --role "Portfolio Constrained Role Assignment Writer" \
+  --role "Constrained Role Assignment Writer" \
   --scope "/subscriptions/<subscription-id>"
 ```
 
@@ -179,11 +179,10 @@ Because the ABAC condition checks the specific role *definition ID* being
 granted against a fixed list of built-in privileged roles, granting a
 custom role (a different, non-listed definition ID) that happens to include
 the same underlying permission is not blocked — even though functionally it
-grants the same capability. This is a real, useful distinction for AZ-104:
-principle of least privilege in practice beats reaching for the nearest
-built-in "big" role, and it's also just... how the guardrail happens to be
-implemented (it checks role *identity*, not the *permissions* a role
-grants).
+grants the same capability. Principle of least privilege in practice beats
+reaching for the nearest built-in "big" role — and it's also just how the
+guardrail happens to be implemented: it checks role *identity*, not the
+*permissions* a role grants.
 
 ### Key Vault + Managed Identity instead of .env
 
@@ -192,14 +191,13 @@ market data over WebSocket), so the VM on Azure can also start with zero
 secrets. Even so, Key Vault is part of the infrastructure from day one,
 because:
 
-1. AZ-104 directly tests Key Vault + Managed Identity + RBAC.
-2. If the SECOND strategy (being designed in parallel) ends up needing
-   keys for a different data provider, the infrastructure is already
-   ready — adding a secret is just `az keyvault secret set`, zero Bicep
-   changes.
+1. Centralized secret management via Key Vault + Managed Identity is
+   standard practice, worth having in place before it's actually needed.
+2. If a future strategy variant ends up needing keys for a different data
+   provider, the infrastructure is already ready — adding a secret is just
+   `az keyvault secret set`, zero Bicep changes.
 3. RBAC (`enableRbacAuthorization: true`), not legacy access policies —
-   that's the current recommended practice and what you should know for
-   the exam.
+   the current recommended practice for Key Vault authorization.
 
 Secrets are **not** created by Bicep — the deployment never sees any
 sensitive values, so nothing sensitive ends up in deployment state or repo
@@ -277,16 +275,6 @@ Lesson: never assume `${...}` works the same way inside a Bicep multi-line
 string as it does in a normal one — and always verify cloud-init side
 effects by actually SSHing in, not just by checking that `cloud-init status`
 reports `done` (a step can "succeed" and still not do what you meant).
-
-## Mapping to AZ-104 exam domains
-
-| AZ-104 domain | Element in this project |
-|---|---|
-| Manage Azure identities and governance | VM System-Assigned Managed Identity; RBAC role assignments to Key Vault and Storage Account; resource naming/tagging in `main.bicep`; OIDC federated credential instead of a client secret |
-| Implement and manage storage | Storage Account (`storage.bicep`) with a blob container for SQLite state backups, `minimumTlsVersion`, no public access |
-| Deploy and manage compute resources | Burstable B2s_v2 VM (`vm.bicep`), cloud-init, Bicep as IaC, deploy/teardown via GitHub Actions |
-| Configure and manage virtual networking | VNet + subnet + NSG (`network.bicep`), inbound/outbound rules, Public IP |
-| Monitor and back up Azure resources | Log Analytics Workspace, Azure Monitor Agent + VM Insights, Data Collection Rule, metric alert (`monitor.bicep`); Storage Account as state backup |
 
 ## Possible extensions (deliberately deferred)
 

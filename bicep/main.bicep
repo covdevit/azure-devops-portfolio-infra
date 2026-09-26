@@ -19,7 +19,7 @@ targetScope = 'subscription'
 // (including why the VM size also had to change).
 param location string = 'polandcentral'
 
-@description('Environment name — used in resource names and tags, e.g. dev, portfolio')
+@description('Environment name — used in resource names and tags, e.g. dev, staging')
 param environmentName string = 'dev'
 
 @description('Admin public IP allowed for SSH (CIDR, e.g. 203.0.113.4/32) — REQUIRED, no sensible default')
@@ -34,8 +34,8 @@ param adminUsername string = 'azadmin'
 var namePrefix = 'tradingvm-${environmentName}'
 
 var tags = {
-  project: 'azure-devops-portfolio'
-  purpose: 'az104-prep-and-trading-strategy'
+  project: 'trading-vm-infrastructure'
+  purpose: 'trading-strategy-hosting'
   managedBy: 'bicep'
   lifecycle: 'ephemeral-deploy-on-demand'
 }

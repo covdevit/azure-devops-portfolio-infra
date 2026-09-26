@@ -1,7 +1,7 @@
 // network.bicep
 // VNet + subnet + Network Security Group — the equivalent of Oracle Cloud's VCN.
 //
-// NSG rules (AZ-104 domain: Configure and manage virtual networking):
+// NSG rules:
 //   - No inbound traffic from the Internet except SSH, and only from one
 //     allow-listed IP address (parameter `adminSourceIp`) — never
 //     0.0.0.0/0 on port 22.

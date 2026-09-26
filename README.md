@@ -4,10 +4,8 @@ Reproducible Azure infrastructure (Bicep + GitHub Actions) for a trading
 bot running as an I/O-bound process (WebSocket + state persistence) on a
 single small VM.
 
-Built as a DevOps portfolio project and as hands-on preparation for the
-**AZ-104 (Azure Administrator Associate)** certification. See
-`docs/ARCHITECTURE.md` for the mapping to exam domains and the reasoning
-behind each design decision.
+See `docs/ARCHITECTURE.md` for the architectural decisions and the
+reasoning behind each design choice.
 
 ## Operating model: deploy-on-demand (ephemeral infra)
 
@@ -22,26 +20,28 @@ down on demand**:
 
 This is a deliberate choice for two reasons:
 
-1. **Cost** — Azure only gives away a free B1S VM for 12 months from
-   account creation (unlike Oracle Always Free, which has no time limit).
-   Tearing down the infrastructure when it's not in use stretches that free
-   allowance further and avoids charges once it runs out.
-2. **Portfolio value** — reproducible, code-driven infrastructure ("cattle,
-   not pets") is exactly what demonstrates real DevOps value in an
-   interview, as opposed to a machine that was clicked together once by
-   hand and left running forever.
+1. **Cost** — Azure gives away a free B1s VM for 12 months from account
+   creation (unlike Oracle Always Free, which has no time limit); this
+   subscription's actual VM size ended up being `Standard_B2s_v2` instead of
+   `B1s` for account-specific reasons unrelated to cost (see
+   `docs/ARCHITECTURE.md`), so it isn't fully free here — tearing down the
+   infrastructure when it's not in use keeps that small cost close to zero.
+2. **Reproducibility** — infrastructure defined and deployed as code
+   ("cattle, not pets") can be recreated identically at any time, rather
+   than depending on a machine that was configured once by hand and left
+   running indefinitely, with configuration drift accumulating over time.
 
 ## Two repositories — why
 
 | Repo | Visibility | Contents |
 |---|---|---|
 | **`azure-devops-portfolio-infra`** (this repo) | **Public** | Bicep, GitHub Actions, architecture docs, systemd unit template. Zero secrets, zero trading logic. |
-| **`trading-strategy-azure`** (separate repo) | **Private** | The actual strategy code (entry/exit logic, scoring). Designed in parallel in a separate chat. |
+| **`trading-strategy-azure`** (separate repo) | **Private** | The actual strategy code (entry/exit logic, scoring). |
 
-Reasoning: the infrastructure code *is* the thing you want to show an
-employer — it can be public with no risk. The strategy code only has value
-if it stays unique, so it stays private, exactly like the strategy already
-running on Oracle.
+Reasoning: the infrastructure code contains no secrets and no proprietary
+trading logic, so it can be public without risk. The strategy code only
+has value if it stays unique, so it stays private, exactly like the
+strategy already running on Oracle.
 
 The two repos are wired together in the `deploy-app.yml` workflow (see
 `.github/workflows/`): the public repo defines *where* and *how* to deploy
@@ -57,7 +57,7 @@ infra-public/
 │   ├── main.bicep              # subscription-scope, orchestrates all modules
 │   ├── modules/
 │   │   ├── network.bicep       # VNet, subnet, NSG
-│   │   ├── vm.bicep            # VM B1S + Managed Identity + NIC
+│   │   ├── vm.bicep            # VM (burstable B-series) + Managed Identity + NIC
 │   │   ├── keyvault.bicep      # Key Vault + RBAC for the Managed Identity
 │   │   └── monitor.bicep       # Log Analytics + VM Insights + alert
 │   └── parameters/
@@ -71,7 +71,7 @@ infra-public/
 ├── systemd/
 │   └── trading-strategy.service # pattern carried over from Oracle
 └── docs/
-    ├── ARCHITECTURE.md          # mapping to AZ-104 exam domains
+    ├── ARCHITECTURE.md          # architectural decisions and reasoning
     └── RUNBOOK.md                # how to deploy / tear down / debug
 ```
 
@@ -87,7 +87,7 @@ infra-public/
    infrastructure → Run workflow).
 4. Once the VM is no longer needed: run the **Teardown infrastructure**
    workflow.
-5. Once the strategy from the other chat is ready: run the **Deploy
+5. Once the strategy code is ready: run the **Deploy
    strategy code** workflow.
 
 Full details for each step, including exact `az cli` commands for manual

@@ -1,7 +1,6 @@
 // vm.bicep
 // A single small burstable VM, Ubuntu 22.04 LTS, with a System-Assigned
-// Managed Identity — no .env file with secrets on disk (AZ-104 domain:
-// Manage Azure identities).
+// Managed Identity — no .env file with secrets on disk.
 //
 // VM size: originally Standard_B1s (the Always Free tier size). Querying
 // `az vm list-skus --location polandcentral --size Standard_B --all` showed

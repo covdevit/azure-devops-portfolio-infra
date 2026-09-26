@@ -1,37 +1,37 @@
 # Architecture
 
 ## Diagram (logical)
-                     ┌─────────────────────────────────────────┐
-                     │      Subscription (deploy-on-demand)     │
-                     │                                           │
-                     │  ┌─────────────────────────────────────┐  │
-                     │  │  Resource Group: tradingvm-dev-rg    │  │
-                     │  │                                       │  │
-                     │  │   ┌───────────┐      ┌─────────────┐ │  │
 
-GitHub Actions ───────┼──┼──▶│ VNet │ │ Key Vault │ │ │
-(OIDC login, │ │ │ + Subnet │ │ (RBAC) │ │ │
-az deployment) │ │ │ + NSG │ └──────▲──────┘ │ │
-│ │ └─────┬─────┘ │ │ │
-│ │ │ │ read secrets
-│ │ ┌─────▼─────────────────────┴────┐ │ │
-│ │ │ VM (B2s_v2, Ubuntu 22.04) │ │ │
-│ │ │ - System-Assigned Managed │ │ │
-│ │ │ Identity │ │ │
-│ │ │ - systemd: trading-strategy │ │ │
-│ │ │ (Restart=always) │ │ │
-│ │ │ - SQLite (local state) │ │ │
-│ │ └──────┬───────────────┬──────────┘ │ │
-│ │ │ syslog/perf │ backup │ │
-│ │ ┌──────▼──────┐ ┌─────▼──────────┐ │ │
-│ │ │ Log Analytics│ │ Storage Account│ │ │
-│ │ │ + VM Insights│ │ (Cool, LRS) │ │ │
-│ │ │ + alert │ └────────────────┘ │ │
-│ │ └─────────────┘ │ │
-│ └───────────────────────────────────────┘ │
-└─────────────────────────────────────────────┘
+                         ┌─────────────────────────────────────────┐
+                         │      Subscription (deploy-on-demand)     │
+                         │                                           │
+                         │  ┌─────────────────────────────────────┐  │
+                         │  │  Resource Group: tradingvm-dev-rg    │  │
+                         │  │                                       │  │
+                         │  │   ┌───────────┐      ┌─────────────┐ │  │
+   GitHub Actions ───────┼──┼──>│    VNet   │      │  Key Vault  │ │  │
+   (OIDC login,          │  │   │  + Subnet │      │  (RBAC)     │ │  │
+    az deployment)       │  │   │  + NSG    │      └──────^──────┘ │  │
+                         │  │   └─────┬─────┘             │        │  │
+                         │  │         │                    │ read secrets
+                         │  │   ┌─────v─────────────────────┴────┐ │  │
+                         │  │   │   VM (B2s_v2, Ubuntu 22.04)     │ │  │
+                         │  │   │   - System-Assigned Managed     │ │  │
+                         │  │   │     Identity                    │ │  │
+                         │  │   │   - systemd: trading-strategy   │ │  │
+                         │  │   │     (Restart=always)            │ │  │
+                         │  │   │   - SQLite (local state)        │ │  │
+                         │  │   └──────┬───────────────┬──────────┘ │  │
+                         │  │          │ syslog/perf   │ backup      │  │
+                         │  │   ┌──────v──────┐  ┌─────v──────────┐ │  │
+                         │  │   │ Log Analytics│  │ Storage Account│ │  │
+                         │  │   │ + VM Insights│  │ (Cool, LRS)    │ │  │
+                         │  │   │ + alert      │  └────────────────┘ │  │
+                         │  │   └─────────────┘                      │  │
+                         │  └───────────────────────────────────────┘  │
+                         └─────────────────────────────────────────────┘
 
-Outside the subscription: exchange (WebSocket, public market data) ◀── VM (outbound only)
+   Outside the subscription:  exchange (WebSocket, public market data) <-- VM (outbound only)
 
 
 ## Decisions and their reasoning

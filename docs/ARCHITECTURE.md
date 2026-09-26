@@ -2,6 +2,7 @@
 
 ## Diagram (logical)
 
+'''
                          ┌─────────────────────────────────────────┐
                          │      Subscription (deploy-on-demand)     │
                          │                                           │
@@ -32,7 +33,7 @@
                          └─────────────────────────────────────────────┘
 
    Outside the subscription:  exchange (WebSocket, public market data) <-- VM (outbound only)
-
+'''
 
 ## Decisions and their reasoning
 

@@ -2,7 +2,7 @@
 
 ## Diagram (logical)
 
-'''
+```
                          ┌─────────────────────────────────────────┐
                          │      Subscription (deploy-on-demand)     │
                          │                                           │
@@ -33,7 +33,7 @@
                          └─────────────────────────────────────────────┘
 
    Outside the subscription:  exchange (WebSocket, public market data) <-- VM (outbound only)
-'''
+```
 
 ## Decisions and their reasoning
 
@@ -69,19 +69,21 @@ The first deploy attempt used `polandcentral` (geographically the obvious
 choice) with `Standard_B1s` (the Always Free size). It failed at the VM
 module with a preflight validation error:
 
+```
 SkuNotAvailable: The requested VM size for resource 'Following SKUs have
 failed for Capacity Restrictions: Standard_B1s' is currently not available
 in location 'PolandCentral'.
-
+```
 
 The first hypothesis was a Poland-Central-specific capacity problem, so the
 region was switched to `westeurope`. That failed differently, and more
 fundamentally:
 
+```
 RequestDisallowedByAzure: Resource 'tradingvm-dev-vnet' was disallowed by
 Azure: The selected region is currently not accepting new customers:
 https://aka.ms/locationineligible.
-
+```
 
 This is an account-level restriction common on new/free Azure
 subscriptions: Microsoft limits which regions a given subscription may
@@ -94,8 +96,9 @@ fix.
 Went back to `polandcentral` and instead queried exactly which VM sizes
 that subscription can actually use there:
 
+```
 az vm list-skus --location polandcentral --size Standard_B --all --output table
-
+```
 
 The result showed a clean split: every size in the legacy "B-series"
 family (`B1s`, `B1ms`, `B2s`, `B2ms`, `B4ms`, `B8ms`, ...) is
@@ -133,10 +136,11 @@ The obvious fix — grant the deployment identity `User Access Administrator`
 at the subscription scope — itself failed, with a different, more
 interesting error:
 
+```
 AuthorizationFailed: The client '<my-account>' ... has an authorization with
 ABAC condition that is not fulfilled to perform action
 'Microsoft.Authorization/roleAssignments/write' ...
-
+```
 
 This is an Azure ABAC (Attribute-Based Access Control) condition attached to
 the account's own Owner role assignment — a guardrail (common on new/free
@@ -204,9 +208,10 @@ history (even if the repo were private).
 One more real-world wrinkle: the first deploy attempt after fixing the RBAC
 issue above failed again, this time with:
 
+```
 BadRequest: The property "enablePurgeProtection" cannot be set to false.
 Enabling the purge protection for a vault is an irreversible action.
-
+```
 
 Azure no longer accepts an explicit `enablePurgeProtection: false` in the
 template at all (since purge protection is a one-way switch, Azure treats

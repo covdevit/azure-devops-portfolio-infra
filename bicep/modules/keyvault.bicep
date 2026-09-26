@@ -40,7 +40,12 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enableRbacAuthorization: true
     enableSoftDelete: true
     softDeleteRetentionInDays: 7 // minimum allowed — this is deploy-on-demand infra, not production
-    enablePurgeProtection: false // deliberately false: we need to be able to `az keyvault purge` during fast teardown/deploy cycles
+    // enablePurgeProtection intentionally omitted (not set to `false`): Azure
+    // now rejects an explicit `false` outright ("cannot be set to false...
+    // irreversible action"), since purge protection is meant to be a one-way
+    // switch. Omitting the property is the only way to leave it disabled,
+    // which is what we want here — we need `az keyvault purge` to work
+    // during fast teardown/deploy cycles (deploy-on-demand, not production).
     networkAcls: {
       defaultAction: 'Allow' // simplification for now; see docs/ARCHITECTURE.md "possible extensions" for a private endpoint
       bypass: 'AzureServices'

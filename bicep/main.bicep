@@ -14,7 +14,7 @@ targetScope = 'subscription'
 // reject the free-tier Standard_B1s VM with a SkuNotAvailable capacity
 // error. West Europe is a large, established region with reliable B1s
 // capacity. See docs/ARCHITECTURE.md.
-param location string = 'westeurope'
+param location string = 'polandcentral'
 
 @description('Environment name — used in resource names and tags, e.g. dev, portfolio')
 param environmentName string = 'dev'

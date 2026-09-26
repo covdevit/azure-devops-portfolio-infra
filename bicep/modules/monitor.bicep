@@ -22,6 +22,12 @@ param tags object
 @description('Log retention in days — 30 is the paid minimum, but plenty for a portfolio/dev project')
 param retentionInDays int = 30
 
+// Reference to the already-deployed VM, needed below to scope the Data
+// Collection Rule Association correctly (see the comment on `dcra`).
+resource vmRef 'Microsoft.Compute/virtualMachines@2023-09-01' existing = {
+  name: vmName
+}
+
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: '${namePrefix}-law'
   location: location
@@ -37,7 +43,8 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
 // Azure Monitor Agent on the VM — collects system metrics (CPU/RAM/disk/
 // network) and (once a Data Collection Rule is configured) application logs.
 resource amaExtension 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = {
-  name: '${vmName}/AzureMonitorLinuxAgent'
+  parent: vmRef
+  name: 'AzureMonitorLinuxAgent'
   location: location
   properties: {
     publisher: 'Microsoft.Azure.Monitor'
@@ -119,12 +126,22 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
   }
 }
 
+// Scoped to the VM itself (vmRef), NOT to the amaExtension resource:
+// Microsoft.Insights/dataCollectionRuleAssociations only supports a fixed
+// list of target resource types (Microsoft.Compute/virtualMachines is on
+// it, Microsoft.Compute/virtualMachines/extensions is not) — scoping this
+// to the extension fails with UnsupportedResourceType. The dependsOn keeps
+// the logical order correct (agent installed before the association is
+// wired up) even though ARM doesn't strictly require it for this resource.
 resource dcra 'Microsoft.Insights/dataCollectionRuleAssociations@2023-03-11' = {
   name: '${namePrefix}-dcra'
-  scope: amaExtension
+  scope: vmRef
   properties: {
     dataCollectionRuleId: dcr.id
   }
+  dependsOn: [
+    amaExtension
+  ]
 }
 
 // Alert: the strategy process should always be burning a bit of CPU (the

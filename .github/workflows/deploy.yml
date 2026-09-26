@@ -33,21 +33,26 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy Bicep (subscription scope)
-        uses: azure/arm-deploy@v2
-        with:
-          scope: subscription
-          region: ${{ github.event.inputs.location }}
-          template: bicep/main.bicep
-          parameters: >
-            bicep/parameters/main.parameters.json
-            environmentName=${{ github.event.inputs.environmentName }}
-            location=${{ github.event.inputs.location }}
-            adminSourceIp=${{ vars.ADMIN_SOURCE_IP }}
-            adminSshPublicKey=${{ vars.ADMIN_SSH_PUBLIC_KEY }}
-          deploymentName: infra-${{ github.run_id }}
+        # Calling az cli directly rather than the azure/arm-deploy action:
+        # that action splits its "parameters" input on whitespace, which
+        # breaks for values that legitimately contain spaces (an SSH public
+        # key is "ssh-ed25519 AAAA... comment"). Plain shell quoting handles
+        # this correctly, and it's the exact same command documented in
+        # docs/RUNBOOK.md for manual deploys.
+        run: |
+          az deployment sub create \
+            --location "${{ github.event.inputs.location }}" \
+            --template-file bicep/main.bicep \
+            --parameters bicep/parameters/main.parameters.json \
+            --parameters environmentName="${{ github.event.inputs.environmentName }}" \
+            --parameters location="${{ github.event.inputs.location }}" \
+            --parameters adminSourceIp="${{ vars.ADMIN_SOURCE_IP }}" \
+            --parameters adminSshPublicKey="${{ vars.ADMIN_SSH_PUBLIC_KEY }}" \
+            --name "infra-${{ github.run_id }}"
 
       - name: Print the new VM's IP address
         run: |
           echo "### Deployment complete" >> "$GITHUB_STEP_SUMMARY"
-          echo "Check the 'vmPublicIp' output in the step above (Azure/arm-deploy)." >> "$GITHUB_STEP_SUMMARY"
-          echo "Or: az deployment sub show --name infra-${{ github.run_id }} --query properties.outputs" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          az deployment sub show --name "infra-${{ github.run_id }}" --query properties.outputs -o json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

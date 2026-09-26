@@ -1,14 +1,18 @@
 // vm.bicep
-// A single B1S VM (Always Free tier for the first 12 months), Ubuntu
-// 22.04 LTS, with a System-Assigned Managed Identity — no .env file with
-// secrets on disk (AZ-104 domain: Manage Azure identities).
+// A single small burstable VM, Ubuntu 22.04 LTS, with a System-Assigned
+// Managed Identity — no .env file with secrets on disk (AZ-104 domain:
+// Manage Azure identities).
 //
-// Initial provisioning is handled by cloud-init: it installs Python,
-// creates the application directory and REGISTERS the systemd service, but
-// does NOT yet start any strategy code — that's the job of the separate
-// `deploy-app.yml` workflow, run once the strategy code is ready (see
-// section 8 of the original outline: "build the infrastructure now, the
-// strategy is just a file to be swapped in later").
+// VM size: originally Standard_B1s (the Always Free tier size). Querying
+// `az vm list-skus --location polandcentral --size Standard_B --all` showed
+// that the ENTIRE legacy "B-series" family (B1s, B1ms, B2s, B2ms, B4ms,
+// B8ms, ...) is NotAvailableForSubscription for this account in Poland
+// Central, while the whole newer "_v2" burstable family (B2s_v2, B4s_v2,
+// ...) is unrestricted. Switched to Standard_B2s_v2 — the closest modern
+// equivalent (2 vCPU / 4 GiB RAM). Trade-off: B2s_v2 is not part of the
+// Always Free 12-month grant (only classic B1s was), so this now incurs a
+// small real cost — acceptable given the deploy-on-demand model, since
+// you're only billed while the VM actually exists. See docs/ARCHITECTURE.md.
 
 @description('Deployment region')
 param location string

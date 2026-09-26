@@ -39,13 +39,20 @@ resource publicIp 'Microsoft.Network/publicIPAddresses@2023-09-01' = {
   location: location
   tags: tags
   sku: {
-    name: 'Basic' // Basic SKU is enough and falls within Always Free; Standard SKU is billed per hour
+    // Standard, not Basic: Azure retired the ability to create Basic SKU
+    // public IPs entirely (retirement completed 30 Sept 2025) — any
+    // subscription now gets IPv4BasicSkuPublicIpCountLimitReached with a
+    // quota of 0 if it tries. Standard is the only option going forward,
+    // and it is NOT covered by the Always Free grant (Basic was), so this
+    // is a small real cost — same reasoning as the VM size change above:
+    // acceptable under the deploy-on-demand model. See docs/ARCHITECTURE.md.
+    name: 'Standard'
   }
   properties: {
     // Static, not Dynamic: we want to know the IP address right after
     // deployment (needed in the output and in the RUNBOOK for `ssh`),
-    // rather than only after the VM has started.
-    // Basic SKU supports Static and stays within Always Free.
+    // rather than only after the VM has started. Standard SKU only
+    // supports Static anyway (Dynamic isn't an option for it).
     publicIPAllocationMethod: 'Static'
   }
 }

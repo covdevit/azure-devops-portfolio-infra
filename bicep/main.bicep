@@ -10,10 +10,13 @@
 targetScope = 'subscription'
 
 @description('Deployment region for all resources')
-// westeurope, not polandcentral: Poland Central has been observed to
-// reject the free-tier Standard_B1s VM with a SkuNotAvailable capacity
-// error. West Europe is a large, established region with reliable B1s
-// capacity. See docs/ARCHITECTURE.md.
+// polandcentral: West Europe was tried as an alternative, but this
+// subscription is restricted at the ACCOUNT level to a small set of
+// regions ("the selected region is currently not accepting new
+// customers") — a common limitation on new/free Azure subscriptions,
+// separate from any per-SKU capacity issue. Poland Central passed that
+// check; West Europe did not. See docs/ARCHITECTURE.md for the full story
+// (including why the VM size also had to change).
 param location string = 'polandcentral'
 
 @description('Environment name — used in resource names and tags, e.g. dev, portfolio')

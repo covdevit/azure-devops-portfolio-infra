@@ -32,7 +32,7 @@ param adminUsername string = 'azadmin'
 @description('Common tags')
 param tags object
 
-var vmSize = 'Standard_B1s'
+var vmSize = 'Standard_B2s_v2'
 
 resource publicIp 'Microsoft.Network/publicIPAddresses@2023-09-01' = {
   name: '${namePrefix}-pip'

@@ -13,12 +13,11 @@ on:
       location:
         description: 'Azure region'
         required: false
-        # westeurope, not polandcentral: Poland Central is a newer, smaller
-        # region and has been observed to reject the free-tier Standard_B1s
-        # VM size with "SkuNotAvailable" (capacity restriction), even though
-        # the SKU is supported there on paper. West Europe is one of Azure's
-        # largest, most established regions and reliably has B1s capacity.
-        default: 'westeurope'
+        # polandcentral: this subscription is restricted at the account
+        # level to a small set of regions; West Europe was rejected
+        # outright ("not accepting new customers"), Poland Central was not.
+        # See docs/ARCHITECTURE.md.
+        default: 'polandcentral'
 
 permissions:
   id-token: write   # required to exchange the OIDC token with Azure AD
